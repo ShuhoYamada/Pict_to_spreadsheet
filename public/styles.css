@@ -1,0 +1,660 @@
+/* リセットとベーススタイル */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+}
+
+/* コンテナ */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* ヘッダー */
+header {
+    text-align: center;
+    margin-bottom: 30px;
+    color: white;
+}
+
+header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+header p {
+    font-size: 1.2rem;
+    opacity: 0.9;
+}
+
+/* カード */
+.card {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.18);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+}
+
+/* セクション */
+.step-section h2 {
+    color: #4a5568;
+    margin-bottom: 15px;
+    font-size: 1.3rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* ボタン */
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+    margin: 5px;
+}
+
+.btn-primary {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(45deg, #5a6fd8, #6a4190);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-success {
+    background: linear-gradient(45deg, #48bb78, #38a169);
+    color: white;
+}
+
+.btn-success:hover {
+    background: linear-gradient(45deg, #38a169, #2f855a);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+}
+
+.btn-secondary {
+    background: #e2e8f0;
+    color: #4a5568;
+}
+
+.btn-secondary:hover {
+    background: #cbd5e0;
+}
+
+.btn:disabled {
+    background: #e2e8f0;
+    color: #a0aec0;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* 情報ボックス */
+.info-box, .preview-box, .results-box {
+    margin-top: 15px;
+    padding: 15px;
+    border-radius: 8px;
+    background: #f7fafc;
+    border-left: 4px solid #667eea;
+    display: none;
+}
+
+.info-box.active, .preview-box.active, .results-box.active {
+    display: block;
+}
+
+.preview-box {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* 対応表選択セクション */
+.mapping-files-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 15px;
+}
+
+@media (max-width: 768px) {
+    .mapping-files-section {
+        grid-template-columns: 1fr;
+    }
+}
+
+.mapping-file-group {
+    padding: 20px;
+    border: 2px dashed #cbd5e0;
+    border-radius: 12px;
+    text-align: center;
+    transition: all 0.3s ease;
+    background: linear-gradient(45deg, #f8fafc, #edf2f7);
+}
+
+.mapping-file-group:hover {
+    border-color: #667eea;
+    background: linear-gradient(45deg, #edf2f7, #e2e8f0);
+}
+
+.mapping-file-group h3 {
+    margin: 0 0 10px 0;
+    color: #2d3748;
+    font-size: 1.2rem;
+}
+
+.mapping-description {
+    margin: 0 0 15px 0;
+    color: #4a5568;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.mapping-file-group .info-box {
+    margin-top: 10px;
+    background: #e6fffa;
+    border-left-color: #38b2ac;
+    font-size: 0.85rem;
+}
+
+/* 結果表示のスタイル */
+.stat-item {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid #e2e8f0;
+    transition: transform 0.2s ease;
+}
+
+.stat-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #667eea;
+    margin-bottom: 5px;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    color: #4a5568;
+}
+
+.file-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px;
+}
+
+.file-item {
+    margin-bottom: 8px;
+    padding: 8px;
+    border-radius: 4px;
+    border-left: 3px solid;
+}
+
+.file-item.skipped {
+    background: #fffacd;
+    border-left-color: #ecc94b;
+}
+
+.file-item.error {
+    background: #fff5f5;
+    border-left-color: #f56565;
+}
+
+.error-message {
+    font-size: 0.8rem;
+    color: #e53e3e;
+    margin-top: 4px;
+}
+
+/* ステータスメッセージ */
+.status-message {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.status-success {
+    background: #c6f6d5;
+    color: #22543d;
+    border: 1px solid #9ae6b4;
+}
+
+.status-error {
+    background: #fed7d7;
+    color: #742a2a;
+    border: 1px solid #fc8181;
+}
+
+.status-info {
+    background: #bee3f8;
+    color: #2a4365;
+    border: 1px solid #90cdf4;
+}
+
+/* プログレスバー */
+.progress-container {
+    margin: 20px 0;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    transition: width 0.3s ease;
+    width: 0%;
+}
+
+.progress-text {
+    text-align: center;
+    margin-top: 10px;
+    font-weight: 600;
+    color: #4a5568;
+}
+
+/* エラーコンテナ */
+.error-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #fed7d7;
+    border: 1px solid #fc8181;
+    border-radius: 8px;
+    padding: 15px;
+    max-width: 400px;
+    z-index: 1000;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+
+.error-message {
+    color: #742a2a;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+/* モーダル */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 15px;
+    max-width: 600px;
+    max-height: 80vh;
+    width: 90%;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    color: white;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.3s ease;
+}
+
+.close-button:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+.modal-body {
+    padding: 20px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* フォルダ操作説明 */
+.folder-instructions {
+    background: linear-gradient(45deg, #e6fffa, #f0fff4);
+    border: 1px solid #68d391;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+}
+
+.folder-instructions p {
+    margin: 0 0 8px 0;
+    color: #2d3748;
+    font-weight: 600;
+}
+
+.folder-instructions ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.folder-instructions li {
+    margin: 5px 0;
+    color: #4a5568;
+}
+
+/* フォルダ・スプレッドシートリスト */
+.folder-list, .spreadsheet-list {
+    display: grid;
+    gap: 10px;
+}
+
+.folder-item, .spreadsheet-item {
+    padding: 15px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 階層ナビゲーション用のフォルダアイテム */
+.folder-item {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.folder-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.folder-content:hover {
+    background: #f8f9fa;
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.clickable-folder {
+    border: 1px solid transparent;
+}
+
+.clickable-folder:hover {
+    border-color: #e2e8f0;
+    background: linear-gradient(45deg, #f7fafc, #edf2f7);
+}
+
+.folder-info {
+    flex: 1;
+}
+
+.folder-expand-hint {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #718096;
+    font-size: 0.8rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.folder-content:hover .folder-expand-hint {
+    opacity: 1;
+}
+
+.expand-icon {
+    font-size: 0.7rem;
+    transform: rotate(0deg);
+    transition: transform 0.3s ease;
+}
+
+.folder-content:hover .expand-icon {
+    transform: rotate(90deg);
+}
+
+.expand-text {
+    white-space: nowrap;
+}
+
+.folder-actions {
+    margin-top: 10px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.select-folder-btn {
+    background: linear-gradient(45deg, #48bb78, #38a169);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.select-folder-btn:hover {
+    background: linear-gradient(45deg, #38a169, #2f855a);
+    transform: translateY(-1px);
+}
+
+/* 戻るボタン */
+.back-button {
+    background: #f7fafc !important;
+    border-color: #cbd5e0 !important;
+    cursor: pointer;
+}
+
+.back-button:hover {
+    background: #edf2f7 !important;
+    border-color: #a0aec0 !important;
+}
+
+/* パンくずリスト */
+.folder-breadcrumbs {
+    padding: 10px 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    font-size: 0.9rem;
+}
+
+.breadcrumb-btn {
+    background: none;
+    border: none;
+    color: #667eea;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: 0.9rem;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: background 0.3s ease;
+}
+
+.breadcrumb-btn:hover {
+    background: #e6f3ff;
+}
+
+.breadcrumb-separator {
+    color: #a0aec0;
+    margin: 0 5px;
+}
+
+.current-folder {
+    color: #4a5568;
+    font-weight: 600;
+}
+
+.spreadsheet-item {
+    cursor: pointer;
+}
+
+.folder-item:hover, .spreadsheet-item:hover {
+    border-color: #667eea;
+    background: #f0f4ff;
+    transform: translateY(-2px);
+}
+
+.folder-item.selected, .spreadsheet-item.selected {
+    border-color: #667eea;
+    background: #e6f3ff;
+}
+
+/* ファイルプレビュー */
+.file-preview {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 8px;
+    margin: 5px 0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+.file-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 0.8rem;
+}
+
+.file-info-item {
+    background: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #e9ecef;
+}
+
+/* レスポンシブ */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    header h1 {
+        font-size: 2rem;
+    }
+    
+    .card {
+        padding: 20px 15px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        max-height: 90vh;
+    }
+    
+    .file-info {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* フッター */
+footer {
+    text-align: center;
+    padding: 20px;
+    color: white;
+    opacity: 0.8;
+}
+
+/* アニメーション */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* 読み込みスピナー */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-left: 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

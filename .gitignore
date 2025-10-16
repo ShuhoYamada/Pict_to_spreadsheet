@@ -1,0 +1,58 @@
+# セキュリティ重要ファイル - 絶対にコミットしない
+.env
+.env.local
+.env.production
+*.key
+*.pem
+*.p12
+
+# Google Cloud認証情報
+service-account-key.json
+credentials.json
+
+# 設定ファイル（実際の値が入っている場合）
+config.js
+
+# 依存関係
+node_modules/
+package-lock.json
+
+# ビルド成果物
+dist/
+build/
+
+# ログファイル
+*.log
+logs/
+
+# OS生成ファイル
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEファイル
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 一時ファイル
+tmp/
+temp/
+.cache/
+
+# テストカバレッジ
+coverage/
+.nyc_output/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.env

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>写真ファイル管理システム</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📷 写真ファイル管理システム</h1>
+            <p>Googleドライブの写真をスプレッドシートに自動整理</p>
+        </header>
+
+        <!-- 認証セクション -->
+        <div class="auth-section card">
+            <h2>🔐 Google認証</h2>
+            <button id="authorize-button" class="btn btn-primary">Googleアカウントで認証</button>
+            <button id="signout-button" class="btn btn-secondary" style="display: none;">サインアウト</button>
+            <div id="auth-status" class="status-message"></div>
+        </div>
+
+        <!-- メイン機能セクション -->
+        <div class="main-section" id="main-section" style="display: none;">
+            
+            <!-- ステップ1: フォルダ選択 -->
+            <div class="step-section card">
+                <h2>📁 ステップ1: Googleドライブのフォルダを選択</h2>
+                <button id="select-folder-button" class="btn btn-primary">フォルダを選択</button>
+                <div id="selected-folder-info" class="info-box"></div>
+                <div id="photo-files-preview" class="preview-box"></div>
+            </div>
+
+            <!-- ステップ2: 対応表選択 -->
+            <div class="step-section card">
+                <h2>📋 ステップ2: ID対応表を選択</h2>
+                <div class="mapping-files-section">
+                    <div class="mapping-file-group">
+                        <h3>🧱 素材ID対応表</h3>
+                        <p class="mapping-description">素材IDを素材名に変換するためのExcelファイルを選択してください</p>
+                        <input type="file" id="material-mapping-file" accept=".xlsx,.xls,.csv" style="display: none;" />
+                        <button id="select-material-mapping-button" class="btn btn-secondary">素材ID対応表を選択</button>
+                        <div id="material-mapping-info" class="info-box"></div>
+                    </div>
+                    
+                    <div class="mapping-file-group">
+                        <h3>⚙️ 加工ID対応表</h3>
+                        <p class="mapping-description">加工IDを加工方法名に変換するためのExcelファイルを選択してください</p>
+                        <input type="file" id="process-mapping-file" accept=".xlsx,.xls,.csv" style="display: none;" />
+                        <button id="select-process-mapping-button" class="btn btn-secondary">加工ID対応表を選択</button>
+                        <div id="process-mapping-info" class="info-box"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ステップ3: スプレッドシート選択 -->
+            <div class="step-section card">
+                <h2>📊 ステップ3: Googleスプレッドシートを選択</h2>
+                <button id="select-spreadsheet-button" class="btn btn-primary">スプレッドシートを選択</button>
+                <div id="selected-spreadsheet-info" class="info-box"></div>
+            </div>
+
+            <!-- ステップ4: データ処理・書き込み -->
+            <div class="step-section card">
+                <h2>⚡ ステップ4: データを処理・書き込み</h2>
+                <button id="process-data-button" class="btn btn-success" disabled>データを処理してスプレッドシートに書き込む</button>
+                <div id="processing-status" class="status-message"></div>
+                <div id="results" class="results-box"></div>
+            </div>
+
+        </div>
+
+        <!-- プログレスバー -->
+        <div class="progress-container" id="progress-container" style="display: none;">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <div class="progress-text" id="progress-text">処理中...</div>
+        </div>
+
+        <!-- エラーメッセージ -->
+        <div id="error-container" class="error-container" style="display: none;">
+            <div class="error-message" id="error-message"></div>
+            <button class="btn btn-secondary" onclick="hideError()">閉じる</button>
+        </div>
+
+        <!-- フォルダ選択モーダル -->
+        <div id="folder-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>📁 フォルダを選択してください</h3>
+                    <button class="close-button" onclick="closeFolderModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="folder-list" class="folder-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- スプレッドシート選択モーダル -->
+        <div id="spreadsheet-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>📊 スプレッドシートを選択してください</h3>
+                    <button class="close-button" onclick="closeSpreadsheetModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="spreadsheet-list" class="spreadsheet-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 写真ファイル管理システム - Powered by Google APIs</p>
+    </footer>
+
+    <script src="config.js"></script>
+    <script src="secure-auth.js"></script>
+    <script src="secure-api.js"></script>
+    <script src="file-parser.js"></script>
+    <script src="mapping-manager.js"></script>
+    <script src="secure-app.js"></script>
+</body>
+</html>
