@@ -432,10 +432,10 @@ class SecureAPIManager {
         return this.selectedSpreadsheet;
     }
 
-    // スプレッドシートのヘッダー情報を取得
-    async getSpreadsheetHeaders(spreadsheetId, sheetName = 'シート1') {
+    // スプレッドシートのヘッダー情報を取得（一番左のシート）
+    async getSpreadsheetHeaders(spreadsheetId) {
         try {
-            const response = await fetch(`${CONFIG.API_BASE_URL}/api/spreadsheets/${spreadsheetId}/headers?sheetName=${encodeURIComponent(sheetName)}`, {
+            const response = await fetch(`${CONFIG.API_BASE_URL}/api/spreadsheets/${spreadsheetId}/headers`, {
                 credentials: 'include'
             });
             
@@ -451,7 +451,7 @@ class SecureAPIManager {
     }
 
     // 新仕様に基づくデータ処理と書き込み
-    async processAndWriteData(spreadsheetId, photoFiles, materialMapping, processMapping, sheetName = 'シート1') {
+    async processAndWriteData(spreadsheetId, photoFiles, materialMapping, processMapping) {
         try {
             // ファイル名解析
             const parser = new FileNameParser();
@@ -467,8 +467,8 @@ class SecureAPIManager {
                 throw new Error('処理対象のファイルがありません');
             }
 
-            // スプレッドシートのヘッダー情報を取得
-            const headerResponse = await this.getSpreadsheetHeaders(spreadsheetId, sheetName);
+            // スプレッドシートのヘッダー情報を取得（一番左のシート）
+            const headerResponse = await this.getSpreadsheetHeaders(spreadsheetId);
             const headers = headerResponse.headers || [];
             
             console.log('📊 ヘッダーレスポンス:', headerResponse);
@@ -525,7 +525,6 @@ class SecureAPIManager {
                 credentials: 'include',
                 body: JSON.stringify({
                     data: processedData,
-                    sheetName: sheetName,
                     columnMapping: columnMapping
                 })
             });

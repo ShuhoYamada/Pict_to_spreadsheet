@@ -330,15 +330,23 @@ app.post('/api/process-excel', upload.single('excelFile'), (req, res) => {
 // スプレッドシートのヘッダー取得
 app.get('/api/spreadsheets/:spreadsheetId/headers', async (req, res) => {
   const { spreadsheetId } = req.params;
-  const { sheetName = 'シート1' } = req.query;
   
   try {
-    console.log(`📡 ヘッダー取得リクエスト: スプレッドシートID=${spreadsheetId}, シート名=${sheetName}`);
+    console.log(`📡 ヘッダー取得リクエスト: スプレッドシートID=${spreadsheetId}`);
+    
+    // スプレッドシートのメタデータを取得して一番左のシート名を取得
+    const metadataResponse = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets.properties.title,sheets.properties.sheetId'
+    });
+    
+    const firstSheetName = metadataResponse.data.sheets[0].properties.title;
+    console.log(`📡 一番左のシート名: ${firstSheetName}`);
     
     // 1行目（ヘッダー行）を取得
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!1:1`,
+      range: `${firstSheetName}!1:1`,
       valueRenderOption: 'UNFORMATTED_VALUE'
     });
     
@@ -348,7 +356,7 @@ app.get('/api/spreadsheets/:spreadsheetId/headers', async (req, res) => {
     res.json({
       success: true,
       headers: headers,
-      sheetName: sheetName
+      sheetName: firstSheetName
     });
   } catch (error) {
     console.error('ヘッダー取得エラー:', error);
@@ -363,12 +371,21 @@ app.get('/api/spreadsheets/:spreadsheetId/headers', async (req, res) => {
 // スプレッドシートに高度なデータ書き込み（動的列マッピング対応）
 app.post('/api/spreadsheets/:spreadsheetId/write-advanced', async (req, res) => {
   const { spreadsheetId } = req.params;
-  const { data, sheetName = 'シート1', columnMapping } = req.body;
+  const { data, columnMapping } = req.body;
   
   try {
     console.log(`📡 高度な書き込みリクエスト: スプレッドシートID=${spreadsheetId}`);
     console.log(`📡 書き込みデータ数: ${data ? data.length : 'undefined'}`);
     console.log(`📡 列マッピング:`, columnMapping);
+    
+    // スプレッドシートのメタデータを取得して一番左のシート名を取得
+    const metadataResponse = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets.properties.title,sheets.properties.sheetId'
+    });
+    
+    const firstSheetName = metadataResponse.data.sheets[0].properties.title;
+    console.log(`📡 書き込み対象シート: ${firstSheetName}`);
     
     // 入力検証
     if (!data || !Array.isArray(data)) {
@@ -382,7 +399,7 @@ app.post('/api/spreadsheets/:spreadsheetId/write-advanced', async (req, res) => 
     // ヘッダー行を取得
     const headerResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!1:1`,
+      range: `${firstSheetName}!1:1`,
       valueRenderOption: 'UNFORMATTED_VALUE'
     });
     
@@ -397,7 +414,7 @@ app.post('/api/spreadsheets/:spreadsheetId/write-advanced', async (req, res) => 
         try {
           const columnResponse = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: `${sheetName}!${columnLetter}:${columnLetter}`,
+            range: `${firstSheetName}!${columnLetter}:${columnLetter}`,
             valueRenderOption: 'UNFORMATTED_VALUE'
           });
           
@@ -426,7 +443,7 @@ app.post('/api/spreadsheets/:spreadsheetId/write-advanced', async (req, res) => 
           // 値が undefined や null でない場合のみ追加
           if (value !== undefined && value !== null) {
             updateRequests.push({
-              range: `${sheetName}!${columnLetter}${row}`,
+              range: `${firstSheetName}!${columnLetter}${row}`,
               values: [[value]]
             });
           }
@@ -476,13 +493,22 @@ app.post('/api/spreadsheets/:spreadsheetId/write-advanced', async (req, res) => 
 // スプレッドシートにデータ書き込み
 app.post('/api/spreadsheets/:spreadsheetId/write', async (req, res) => {
   const { spreadsheetId } = req.params;
-  const { data, sheetName = 'シート1' } = req.body;
+  const { data } = req.body;
   
   try {
+    // スプレッドシートのメタデータを取得して一番左のシート名を取得
+    const metadataResponse = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets.properties.title,sheets.properties.sheetId'
+    });
+    
+    const firstSheetName = metadataResponse.data.sheets[0].properties.title;
+    console.log(`📡 書き込み対象シート: ${firstSheetName}`);
+    
     // 既存データの確認
     const existingResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A2:G1000`,
+      range: `${firstSheetName}!A2:G1000`,
       valueRenderOption: 'UNFORMATTED_VALUE'
     });
     
@@ -491,7 +517,7 @@ app.post('/api/spreadsheets/:spreadsheetId/write', async (req, res) => {
     
     // データを書き込み
     const requests = data.map((row, index) => ({
-      range: `${sheetName}!A${nextRow + index}:G${nextRow + index}`,
+      range: `${firstSheetName}!A${nextRow + index}:G${nextRow + index}`,
       values: [row]
     }));
     
