@@ -42,7 +42,8 @@ class MappingTableManager {
             showProgress('素材ID対応表を読み込み中...', 0);
             
             this.materialMappingFile = file;
-            const mappingData = await this.parseExcelFile(file, '素材ID', '素材名');
+            // 素材名と素材区分の両方を取得
+            const mappingData = await this.parseMaterialExcelFile(file);
             this.materialMapping = mappingData;
 
             // UI更新
@@ -54,7 +55,7 @@ class MappingTableManager {
                     <p><strong>データ数:</strong> ${Object.keys(mappingData).length} 件</p>
                     <div class="mapping-preview">
                         <strong>プレビュー:</strong>
-                        ${this.generateMappingPreview(mappingData, 3)}
+                        ${this.generateMaterialMappingPreview(mappingData, 3)}
                     </div>
                 </div>
             `;
@@ -175,6 +176,94 @@ class MappingTableManager {
         });
     }
 
+    // 素材Excelファイルの解析（素材名と素材区分の両方を取得）
+    async parseMaterialExcelFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                try {
+                    // SheetJSライブラリを使用してExcelファイルを解析
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    // 最初のシートを取得
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // JSONに変換
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (jsonData.length < 2) {
+                        throw new Error('ファイルにデータが不足しています（ヘッダー + 最低1行のデータが必要）');
+                    }
+
+                    // ヘッダー行から列インデックスを特定
+                    const headerRow = jsonData[0];
+                    const idColumnIndex = headerRow.findIndex(header => 
+                        header && header.toString().trim() === '素材ID'
+                    );
+                    const nameColumnIndex = headerRow.findIndex(header => 
+                        header && header.toString().trim() === '素材名'
+                    );
+                    const categoryColumnIndex = headerRow.findIndex(header => 
+                        header && header.toString().trim() === '素材区分'
+                    );
+
+                    if (idColumnIndex === -1) {
+                        throw new Error('「素材ID」列が見つかりません');
+                    }
+                    if (nameColumnIndex === -1) {
+                        throw new Error('「素材名」列が見つかりません');
+                    }
+                    if (categoryColumnIndex === -1) {
+                        throw new Error('「素材区分」列が見つかりません');
+                    }
+
+                    // データ行を処理してマッピングオブジェクトを作成
+                    const mapping = {};
+                    for (let i = 1; i < jsonData.length; i++) {
+                        const row = jsonData[i];
+                        const id = row[idColumnIndex];
+                        const name = row[nameColumnIndex];
+                        const category = row[categoryColumnIndex];
+                        
+                        if (id && name && category) {
+                            mapping[id.toString().trim()] = {
+                                name: name.toString().trim(),
+                                category: category.toString().trim()
+                            };
+                        }
+                    }
+
+                    if (Object.keys(mapping).length === 0) {
+                        throw new Error('有効なデータが見つかりませんでした');
+                    }
+
+                    resolve(mapping);
+
+                } catch (error) {
+                    reject(new Error('ファイルの解析に失敗しました: ' + error.message));
+                }
+            };
+
+            reader.onerror = () => {
+                reject(new Error('ファイルの読み込みに失敗しました'));
+            };
+
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    // 素材マッピングプレビューの生成
+    generateMaterialMappingPreview(mapping, maxItems = 3) {
+        const entries = Object.entries(mapping).slice(0, maxItems);
+        const preview = entries.map(([id, data]) => `${id} → ${data.name}(${data.category})`).join('<br>');
+        const remaining = Object.keys(mapping).length - maxItems;
+        
+        return preview + (remaining > 0 ? `<br>...他 ${remaining} 件` : '');
+    }
+
     // マッピングプレビューの生成
     generateMappingPreview(mapping, maxItems = 3) {
         const entries = Object.entries(mapping).slice(0, maxItems);
@@ -196,12 +285,22 @@ class MappingTableManager {
         }
     }
 
-    // IDから名称への変換
-    getMaterialName(materialId) {
+    // IDから素材データ（名前と区分）への変換
+    getMaterialData(materialId) {
         if (!this.materialMapping) {
-            return '該当なし';
+            return { name: '該当なし', category: '該当なし' };
         }
-        return this.materialMapping[materialId] || '該当なし';
+        const materialData = this.materialMapping[materialId];
+        if (!materialData) {
+            return { name: '該当なし', category: '該当なし' };
+        }
+        return materialData;
+    }
+
+    // 従来の互換性のためのメソッド（非推奨）
+    getMaterialName(materialId) {
+        const materialData = this.getMaterialData(materialId);
+        return materialData.name;
     }
 
     // IDから加工方法名への変換

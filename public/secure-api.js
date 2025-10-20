@@ -483,15 +483,16 @@ class SecureAPIManager {
                 throw new Error('スプレッドシートにヘッダー行が見つかりません');
             }
             
-            // 列マッピングを生成（実際のスプレッドシートヘッダー名に合わせて修正）
+            // 列マッピングを生成（新しい仕様に対応）
             const columnMapping = {
                 fileName: headers.indexOf('ファイル名'),
                 partName: headers.indexOf('構成部品'),
                 weightInGrams: headers.indexOf('重量[g]'),
                 weightInKilograms: headers.indexOf('重量[kg]'),
-                materialId: headers.indexOf('素材ID'),
+                materialId: headers.indexOf('ID'),              // 素材IDをID列に
                 processId: headers.indexOf('加工ID'),
-                materialName: headers.indexOf('素材'),
+                materialCategory: headers.indexOf('素材'),        // 素材区分を素材列に
+                materialName: headers.indexOf('項目名'),          // 素材名を項目名列に
                 processName: headers.indexOf('加工方法'),
                 notesText: headers.indexOf('特記事項'),
                 originalUnit: headers.indexOf('元の単位')
@@ -501,17 +502,24 @@ class SecureAPIManager {
             
             // データを変換して送信
             const processedData = validFiles.map(parsed => {
+                // 素材データを取得（素材名と素材区分）
+                const materialData = materialMapping ? 
+                    (materialMapping[parsed.materialId] || { name: '該当なし', category: '該当なし' }) :
+                    { name: '該当なし', category: '該当なし' };
+                
                 return {
                     fileName: parsed.fileName,
                     partName: parsed.partName,
                     weightInGrams: parsed.weightInGrams,
                     weightInKilograms: parsed.weightInKilograms,
-                    materialId: parsed.materialId,
+                    materialId: parsed.materialId,               // 素材IDそのもの
                     processId: parsed.processId,
                     notesText: parsed.notesText,
                     originalUnit: parsed.unit,
-                    // ID変換
-                    materialName: materialMapping ? materialMapping[parsed.materialId] || '該当なし' : '該当なし',
+                    // 素材関連の変換
+                    materialName: materialData.name,             // 素材名（項目名列用）
+                    materialCategory: materialData.category,     // 素材区分（素材列用）
+                    // 加工ID変換
                     processName: processMapping ? processMapping[parsed.processId] || '該当なし' : '該当なし'
                 };
             });
