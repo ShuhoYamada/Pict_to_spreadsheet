@@ -159,5 +159,15 @@ function hideError() {
     errorContainer.style.display = 'none';
 }
 
+function showMessage(message, type = 'info') {
+    // 成功メッセージやその他の情報メッセージを表示
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    
+    // ステータス表示があれば使用
+    if (typeof showStatus === 'function') {
+        showStatus(message, type);
+    }
+}
+
 // セキュア認証マネージャーのインスタンス化
 let authManager;

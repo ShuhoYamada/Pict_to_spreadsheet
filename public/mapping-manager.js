@@ -281,7 +281,12 @@ class MappingTableManager {
                 checkProcessButtonState();
             }
             
-            showMessage('✅ すべての対応表の読み込みが完了しました', 'success');
+            // すべての対応表の読み込み完了メッセージを表示
+            if (typeof showMessage === 'function') {
+                showMessage('✅ すべての対応表の読み込みが完了しました', 'success');
+            } else {
+                console.log('✅ すべての対応表の読み込みが完了しました');
+            }
         }
     }
 
