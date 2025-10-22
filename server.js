@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
-const xlsx = require('xlsx');
+const ExcelJS = require('exceljs');
 const { google } = require('googleapis');
 require('dotenv').config();
 
@@ -279,7 +279,7 @@ app.get('/api/spreadsheets', async (req, res) => {
 });
 
 // Excelファイル処理エンドポイント
-app.post('/api/process-excel', upload.single('excelFile'), (req, res) => {
+app.post('/api/process-excel', upload.single('excelFile'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ 
@@ -290,13 +290,21 @@ app.post('/api/process-excel', upload.single('excelFile'), (req, res) => {
 
     console.log(`📁 Excelファイル処理開始: ${req.file.originalname}`);
     
-    // ExcelファイルをBufferから読み込み
-    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0]; // 最初のシートを使用
-    const worksheet = workbook.Sheets[sheetName];
+    // ExcelJSでExcelファイルをBufferから読み込み
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+    
+    const worksheet = workbook.worksheets[0]; // 最初のシートを使用
     
     // JSONに変換
-    const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+    const jsonData = [];
+    worksheet.eachRow((row, rowNumber) => {
+      const rowData = [];
+      row.eachCell((cell, colNumber) => {
+        rowData[colNumber - 1] = cell.value;
+      });
+      jsonData.push(rowData);
+    });
     
     // IDマッピングテーブルを作成
     const mapping = {};
