@@ -461,7 +461,11 @@ class SecureAPIManager {
             const validFiles = parseResults.valid.filter(parsed => !parsed.shouldSkip);
             const skippedFiles = parseResults.valid.filter(parsed => parsed.shouldSkip);
             
+            // 番号順にソート（昇順：1,2,3,4...）
+            validFiles.sort((a, b) => a.number - b.number);
+            
             console.log(`📊 解析結果: 全${photoFiles.length}件 -> 有効${validFiles.length}件, スキップ${skippedFiles.length}件, 無効${parseResults.invalid.length}件`);
+            console.log('📂 ソート後のファイル順序:', validFiles.map(f => `${f.numberString}(${f.number})`).join(', '));
 
             if (validFiles.length === 0) {
                 throw new Error('処理対象のファイルがありません');

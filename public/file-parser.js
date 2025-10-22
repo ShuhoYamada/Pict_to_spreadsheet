@@ -109,6 +109,8 @@ class FileNameParser {
                 isValid: true,
                 shouldSkip: false,
                 fileName: fileName,
+                number: parseInt(number) || 0,  // 番号を数値として保存
+                numberString: number,           // 元の文字列も保持
                 partName: partName,
                 weight: weightNum,
                 weightString: weight, // 元の文字列も保持
