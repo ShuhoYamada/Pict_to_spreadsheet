@@ -289,6 +289,17 @@ function checkProcessButtonState() {
 // ページ読み込み完了後にセキュアアプリケーションを初期化
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM読み込み完了 - セキュアアプリケーションを初期化します');
+    // マッピングのイベントはアプリ初期化に依存せず登録しておく
+    // （バックエンド接続検証に失敗した場合でも、ファイル選択UIは動作させたい）
+    try {
+        if (typeof mappingManager !== 'undefined' && mappingManager && typeof mappingManager.initialize === 'function') {
+            mappingManager.initialize();
+            console.log('mappingManager 初期化: イベントリスナー登録済み');
+        }
+    } catch (err) {
+        console.warn('mappingManager.initialize() 呼び出し中にエラー:', err);
+    }
+
     window.photoFileManager = new SecurePhotoFileManagerApp();
 });
 
