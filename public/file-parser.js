@@ -50,15 +50,31 @@ class FileNameParser {
                 };
             }
 
-            // 写真区分がMの場合は処理対象外
+            // 写真区分がMの場合の処理を変更：ハイパーリンク設定のため処理対象とする
             if (photoType.toLowerCase() === 'm') {
                 return {
                     isValid: true,
-                    shouldSkip: true,
-                    skipReason: '写真区分がMのため処理対象外',
+                    shouldSkip: false, // ハイパーリンク設定のため処理対象に含める
+                    isPhotoTypeM: true, // M区分であることを示すフラグ
+                    skipReason: 'M区分：ハイパーリンク設定対象',
                     fileName: fileName,
+                    number: parseInt(number) || 0,  // 番号を数値として保存
+                    numberString: number,           // 元の文字列も保持
                     partName: partName,
-                    photoType: photoType
+                    weight: parseFloat(weight) || 0,
+                    weightString: weight,
+                    unit: unit.toLowerCase(),
+                    materialId: materialId,
+                    processId: processId,
+                    photoType: photoType.toLowerCase(),
+                    notes: notes,
+                    parts: parts,
+                    parsedAt: new Date(),
+                    // 単位変換用の重量値を事前計算
+                    weightInGrams: unit.toLowerCase() === 'kg' ? (parseFloat(weight) || 0) * 1000 : (parseFloat(weight) || 0),
+                    weightInKilograms: unit.toLowerCase() === 'g' ? (parseFloat(weight) || 0) / 1000 : (parseFloat(weight) || 0),
+                    // 特記事項の変換（M区分でも設定）
+                    notesText: notes === '0' ? '-' : 'あり'
                 };
             }
 

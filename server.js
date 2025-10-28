@@ -245,7 +245,7 @@ app.get('/api/folders/:folderId/photos', async (req, res) => {
     const response = await drive.files.list({
       q: query,
       pageSize: 1000,
-      fields: 'files(id,name,size,modifiedTime)',
+      fields: 'files(id,name,size,modifiedTime,webViewLink)',
       orderBy: 'name'
     });
     
@@ -258,6 +258,120 @@ app.get('/api/folders/:folderId/photos', async (req, res) => {
   } catch (error) {
     console.error('写真ファイル取得エラー:', error);
     res.status(500).json({ error: '写真ファイルの取得に失敗しました' });
+  }
+});
+
+// 写真ファイルの共有リンク取得（個別）
+app.get('/api/files/:fileId/sharelink', async (req, res) => {
+  const { fileId } = req.params;
+  
+  try {
+    console.log(`🔗 共有リンク取得開始 (fileId: ${fileId})`);
+    
+    // リトライメカニズム付きでファイル情報を取得
+    let file;
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        const response = await drive.files.get({
+          fileId: fileId,
+          fields: 'id,name,webViewLink,permissions'
+        });
+        file = response.data;
+        console.log(`✅ ファイル情報取得成功 (試行回数: ${retryCount + 1}): ${file.name}, webViewLink: ${file.webViewLink || 'なし'}`);
+        break;
+      } catch (retryError) {
+        retryCount++;
+        console.warn(`⚠️ ファイル情報取得失敗 (試行回数: ${retryCount}/${maxRetries}):`, {
+          fileId,
+          error: retryError.message,
+          errorCode: retryError.code
+        });
+        
+        if (retryCount >= maxRetries) {
+          throw retryError;
+        }
+        
+        // リトライ前に少し待機
+        const waitTime = Math.pow(2, retryCount) * 500; // 1秒, 2秒, 4秒
+        console.log(`⏳ ${waitTime/1000}秒待機してリトライします...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
+    
+    // webViewLinkが存在しない場合、ファイルを公開共有に設定
+    if (!file.webViewLink) {
+      console.log('🔗 webViewLinkが見つからないため、共有設定を確認中...');
+      
+      try {
+        // ファイルを「リンクを知っている全員が閲覧可能」に設定
+        await drive.permissions.create({
+          fileId: fileId,
+          requestBody: {
+            role: 'reader',
+            type: 'anyone'
+          }
+        });
+        
+        console.log('✅ 共有設定完了: リンクを知っている全員が閲覧可能');
+        
+        // 再度ファイル情報を取得
+        const updatedResponse = await drive.files.get({
+          fileId: fileId,
+          fields: 'id,name,webViewLink'
+        });
+        
+        const updatedFile = updatedResponse.data;
+        console.log(`🔗 更新後のwebViewLink: ${updatedFile.webViewLink}`);
+        
+        res.json({
+          success: true,
+          fileId: fileId,
+          fileName: updatedFile.name,
+          shareLink: updatedFile.webViewLink,
+          retryCount: retryCount
+        });
+      } catch (permissionError) {
+        console.error('❌ 共有設定エラー:', {
+          fileId,
+          error: permissionError.message,
+          errorCode: permissionError.code,
+          errorDetails: permissionError.response?.data || 'レスポンスデータなし'
+        });
+        res.status(500).json({ 
+          error: 'ファイルの共有設定に失敗しました', 
+          details: permissionError.message,
+          fileId: fileId,
+          errorCode: permissionError.code
+        });
+      }
+    } else {
+      res.json({
+        success: true,
+        fileId: fileId,
+        fileName: file.name,
+        shareLink: file.webViewLink,
+        retryCount: retryCount
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ 共有リンク取得エラー (最終失敗):', {
+      fileId,
+      error: error.message,
+      errorCode: error.code,
+      stack: error.stack,
+      errorDetails: error.response?.data || 'レスポンスデータなし'
+    });
+    res.status(500).json({ 
+      error: '共有リンクの取得に失敗しました', 
+      details: error.message,
+      fileId: fileId,
+      errorCode: error.code,
+      errorDetails: error.response?.data || 'レスポンスデータなし'
+    });
   }
 });
 
@@ -352,19 +466,34 @@ app.get('/api/spreadsheets/:spreadsheetId/headers', async (req, res) => {
     console.log(`📡 一番左のシート名: ${firstSheetName}`);
     
     // 1行目（ヘッダー行）を取得
-    const response = await sheets.spreadsheets.values.get({
+    const headerResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `${firstSheetName}!1:1`,
       valueRenderOption: 'UNFORMATTED_VALUE'
     });
     
-    const headers = response.data.values ? response.data.values[0] : [];
+    const headers = headerResponse.data.values ? headerResponse.data.values[0] : [];
     console.log(`📡 取得したヘッダー:`, headers);
+    
+    // データ行数を取得（現在のデータ範囲を特定）
+    let dataRowCount = 0;
+    try {
+      const dataResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${firstSheetName}!A:A`,
+        valueRenderOption: 'UNFORMATTED_VALUE'
+      });
+      dataRowCount = (dataResponse.data.values || []).length;
+      console.log(`📡 データ行数: ${dataRowCount}`);
+    } catch (error) {
+      console.warn('データ行数取得時のエラー:', error.message);
+    }
     
     res.json({
       success: true,
       headers: headers,
-      sheetName: firstSheetName
+      sheetName: firstSheetName,
+      dataRowCount: dataRowCount
     });
   } catch (error) {
     console.error('ヘッダー取得エラー:', error);
@@ -416,6 +545,8 @@ app.post('/api/spreadsheets/:spreadsheetId/write-advanced', async (req, res) => 
     
     // 各列の最終行を取得
     const columnLastRows = {};
+    let actualStartRow = Infinity; // 実際の書き込み開始行を追跡
+    
     for (const [key, columnIndex] of Object.entries(columnMapping)) {
       if (columnIndex !== -1 && columnIndex < headers.length) {
         const columnLetter = String.fromCharCode(65 + columnIndex); // A, B, C...
@@ -427,16 +558,33 @@ app.post('/api/spreadsheets/:spreadsheetId/write-advanced', async (req, res) => 
           });
           
           const columnValues = columnResponse.data.values || [];
-          columnLastRows[key] = columnValues.length + 1; // 次の空行
-          console.log(`📡 列${columnLetter}(${key})の最終行: ${columnLastRows[key]}`);
+          const nextRow = columnValues.length + 1; // 次の空行
+          columnLastRows[key] = nextRow;
+          
+          // 実際の開始行を記録（最小値）
+          if (nextRow < actualStartRow) {
+            actualStartRow = nextRow;
+          }
+          
+          console.log(`📡 列${columnLetter}(${key})の最終行: ${nextRow}`);
         } catch (columnError) {
           console.warn(`📡 列${columnLetter}(${key})の読み取りエラー:`, columnError.message);
           columnLastRows[key] = 2; // デフォルトで2行目から開始
+          if (2 < actualStartRow) {
+            actualStartRow = 2;
+          }
         }
       } else {
         console.log(`📡 列${key}はスキップ: インデックス=${columnIndex}, ヘッダー数=${headers.length}`);
       }
     }
+    
+    // 実際の開始行が設定されていない場合のフォールバック
+    if (actualStartRow === Infinity) {
+      actualStartRow = 2;
+    }
+    
+    console.log(`📡 実際の書き込み開始行: ${actualStartRow}`);
     
     // データを書き込み
     const updateRequests = [];
@@ -479,7 +627,8 @@ app.post('/api/spreadsheets/:spreadsheetId/write-advanced', async (req, res) => 
         success: true,
         updatedCells: result.data.totalUpdatedCells,
         updatedRows: result.data.totalUpdatedRows,
-        processedRecords: data.length
+        processedRecords: data.length,
+        actualStartRow: actualStartRow // 実際の書き込み開始行を追加
       });
     } else {
       res.json({
@@ -547,6 +696,212 @@ app.post('/api/spreadsheets/:spreadsheetId/write', async (req, res) => {
   } catch (error) {
     console.error('データ書き込みエラー:', error);
     res.status(500).json({ error: 'データの書き込みに失敗しました' });
+  }
+});
+
+// ハイパーリンクをスプレッドシートのセルに設定
+app.post('/api/spreadsheets/:spreadsheetId/set-hyperlink', async (req, res) => {
+  const { spreadsheetId } = req.params;
+  const { sheetName, cellAddress, url, displayText } = req.body;
+  
+  try {
+    console.log(`🔗 ハイパーリンク設定開始: ${cellAddress} -> ${url}`);
+    
+    // 入力検証
+    if (!cellAddress || !url) {
+      return res.status(400).json({ 
+        error: 'セルアドレスとURLは必須です',
+        received: { cellAddress, url }
+      });
+    }
+    
+    // セルアドレスをパース (例: "A5" -> row=5, col=1)
+    const match = cellAddress.match(/^([A-Z]+)(\d+)$/);
+    if (!match) {
+      return res.status(400).json({ 
+        error: '無効なセルアドレス形式です。例: A5, B10',
+        received: cellAddress
+      });
+    }
+    
+    const column = match[1];
+    const row = parseInt(match[2]);
+    
+    // 列文字を数値に変換 (A=0, B=1, ...)
+    let columnIndex = 0;
+    for (let i = 0; i < column.length; i++) {
+      columnIndex = columnIndex * 26 + (column.charCodeAt(i) - 'A'.charCodeAt(0) + 1);
+    }
+    columnIndex--; // 0ベースのインデックスに調整
+    
+    // シート名が指定されていない場合、最初のシートを使用
+    let targetSheetName = sheetName;
+    if (!targetSheetName) {
+      const initialMetadataResponse = await sheets.spreadsheets.get({
+        spreadsheetId,
+        fields: 'sheets.properties.title'
+      });
+      targetSheetName = initialMetadataResponse.data.sheets[0].properties.title;
+    }
+    
+    // シートIDを取得
+    const sheetMetadataResponse = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets.properties'
+    });
+    
+    const hyperlinkTargetSheet = sheetMetadataResponse.data.sheets.find(sheet => 
+      sheet.properties.title === targetSheetName
+    );
+    
+    if (!hyperlinkTargetSheet) {
+      return res.status(404).json({ 
+        error: `シート '${targetSheetName}' が見つかりません`,
+        availableSheets: sheetMetadataResponse.data.sheets.map(s => s.properties.title)
+      });
+    }
+    
+    // 現在のセルの値を取得
+    let currentCellValue = displayText || '';
+    try {
+      const currentValueResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${targetSheetName}!${cellAddress}`,
+        valueRenderOption: 'UNFORMATTED_VALUE'
+      });
+      
+      if (currentValueResponse.data.values && currentValueResponse.data.values[0] && currentValueResponse.data.values[0][0]) {
+        currentCellValue = currentValueResponse.data.values[0][0].toString();
+        console.log(`🔗 現在のセル値を取得: ${currentCellValue}`);
+      } else {
+        console.log(`🔗 セルは空または値なし、displayTextを使用: ${currentCellValue}`);
+      }
+    } catch (error) {
+      console.warn(`🔗 現在のセル値取得エラー、displayTextを使用: ${error.message}`);
+      // エラーの場合はdisplayTextを使用（フォールバック）
+    }
+    
+    // URLとセル値をエスケープして安全にする
+    const escapedUrl = url.replace(/"/g, '""'); // ダブルクォートをエスケープ
+    const escapedCellValue = currentCellValue.replace(/"/g, '""'); // ダブルクォートをエスケープ
+    
+    console.log(`🔗 エスケープ後 URL: ${escapedUrl}`);
+    console.log(`🔗 エスケープ後 セル値: ${escapedCellValue}`);
+    
+    // ハイパーリンクを設定するためのbatchUpdateリクエスト
+    const requests = [{
+      updateCells: {
+        range: {
+          sheetId: hyperlinkTargetSheet.properties.sheetId,
+          startRowIndex: row - 1,
+          endRowIndex: row,
+          startColumnIndex: columnIndex,
+          endColumnIndex: columnIndex + 1
+        },
+        rows: [{
+          values: [{
+            userEnteredValue: {
+              formulaValue: `=HYPERLINK("${escapedUrl}", "${escapedCellValue}")`
+            }
+          }]
+        }],
+        fields: 'userEnteredValue'
+      }
+    }];
+    
+    // シートIDを取得
+    const metadataResponse = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets.properties'
+    });
+    
+    const targetSheet = metadataResponse.data.sheets.find(sheet => 
+      sheet.properties.title === targetSheetName
+    );
+    
+    if (!targetSheet) {
+      return res.status(404).json({ 
+        error: `シート '${targetSheetName}' が見つかりません`,
+        availableSheets: metadataResponse.data.sheets.map(s => s.properties.title)
+      });
+    }
+    
+    // 正しいシートIDを設定
+    requests[0].updateCells.range.sheetId = targetSheet.properties.sheetId;
+    
+    const batchUpdateRequest = {
+      spreadsheetId,
+      resource: {
+        requests: requests
+      }
+    };
+    
+    console.log(`🔗 ハイパーリンク設定リクエスト詳細:`, {
+      cellAddress,
+      url: escapedUrl,
+      displayText: escapedCellValue,
+      sheetName: targetSheetName,
+      sheetId: hyperlinkTargetSheet.properties.sheetId
+    });
+    
+    // リトライメカニズム付きでハイパーリンク設定を実行
+    let result;
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        result = await sheets.spreadsheets.batchUpdate(batchUpdateRequest);
+        console.log(`✅ ハイパーリンク設定成功 (試行回数: ${retryCount + 1}): ${cellAddress} -> ${url}`);
+        break;
+      } catch (retryError) {
+        retryCount++;
+        console.warn(`⚠️ ハイパーリンク設定失敗 (試行回数: ${retryCount}/${maxRetries}):`, {
+          cellAddress,
+          error: retryError.message,
+          errorCode: retryError.code,
+          errorDetails: retryError.response?.data || 'レスポンスデータなし'
+        });
+        
+        if (retryCount >= maxRetries) {
+          throw retryError;
+        }
+        
+        // リトライ前に少し待機（指数バックオフ）
+        const waitTime = Math.pow(2, retryCount) * 1000; // 2秒, 4秒, 8秒
+        console.log(`⏳ ${waitTime/1000}秒待機してリトライします...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
+    
+    res.json({
+      success: true,
+      cellAddress: cellAddress,
+      url: url,
+      displayText: escapedCellValue,
+      sheetName: targetSheetName,
+      retryCount: retryCount,
+      result: result.data
+    });
+    
+  } catch (error) {
+    console.error('❌ ハイパーリンク設定エラー (最終失敗):', {
+      cellAddress,
+      url,
+      error: error.message,
+      errorCode: error.code,
+      stack: error.stack,
+      errorDetails: error.response?.data || 'レスポンスデータなし'
+    });
+    
+    res.status(500).json({ 
+      error: 'ハイパーリンクの設定に失敗しました', 
+      details: error.message,
+      cellAddress: cellAddress,
+      url: url,
+      errorCode: error.code,
+      errorDetails: error.response?.data || 'レスポンスデータなし'
+    });
   }
 });
 

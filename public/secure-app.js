@@ -161,13 +161,14 @@ class SecurePhotoFileManagerApp {
         const { folder, spreadsheet, result } = results;
 
         let resultsHTML = `
-            <h4>🎉 処理結果 (新仕様対応版)</h4>
+            <h4>🎉 処理結果 (ハイパーリンク対応版)</h4>
             
             <div class="result-section" style="margin-bottom: 20px;">
                 <h5>🔒 セキュリティ情報</h5>
                 <p>✅ すべてのGoogle APIs通信はバックエンドサーバー経由で暗号化されています</p>
                 <p>✅ APIキーやアクセストークンはブラウザに露出されていません</p>
                 <p>✅ ID対応表はローカルファイルから安全に参照されています</p>
+                <p>✅ 写真ファイルのハイパーリンクが自動設定されました</p>
             </div>
 
             <div class="result-section" style="margin-bottom: 20px;">
@@ -182,34 +183,50 @@ class SecurePhotoFileManagerApp {
 
             <div class="result-section" style="margin-bottom: 20px;">
                 <h5>📈 処理統計</h5>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
                     <div class="stat-item">
                         <div class="stat-number">${result.totalCount}</div>
                         <div class="stat-label">総ファイル数</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-number">${result.writtenCount}</div>
-                        <div class="stat-label">書き込み完了</div>
+                        <div class="stat-label">P区分書き込み</div>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-number">${result.skippedCount}</div>
-                        <div class="stat-label">スキップ (M区分)</div>
+                        <div class="stat-number">${result.mTypeCount || 0}</div>
+                        <div class="stat-label">M区分処理</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">${result.hyperlinkCount || 0}</div>
+                        <div class="stat-label">ハイパーリンク</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-number">${result.invalidCount}</div>
                         <div class="stat-label">形式エラー</div>
                     </div>
                 </div>
+            </div>
+
+            <div class="result-section" style="margin-bottom: 20px;">
+                <h5>🔗 ハイパーリンク設定結果</h5>
+                <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid #0ea5e9;">
+                    <p><strong>P区分：</strong> 「構成部品」列にハイパーリンクを設定</p>
+                    <p><strong>M区分：</strong> 対応するP区分行の「素材」列にハイパーリンクを設定</p>
+                    <p><strong>設定完了：</strong> ${result.hyperlinkCount || 0} 個のハイパーリンク</p>
+                </div>
             </div>`;
 
-        // スキップされたファイルの詳細
-        if (result.skippedFiles && result.skippedFiles.length > 0) {
+        // ハイパーリンクエラーがある場合
+        if (result.hyperlinkErrors && result.hyperlinkErrors.length > 0) {
             resultsHTML += `
                 <div class="result-section" style="margin-bottom: 20px;">
-                    <h5>⏭️ スキップされたファイル (写真区分=M)</h5>
+                    <h5>⚠️ ハイパーリンク設定エラー</h5>
                     <div class="file-list">
-                        ${result.skippedFiles.map(fileName => 
-                            `<div class="file-item skipped">📷 ${this.escapeHtml(fileName)}</div>`
+                        ${result.hyperlinkErrors.map(error => 
+                            `<div class="file-item error">
+                                <strong>📷 ${this.escapeHtml(error.fileName)} (${error.type})</strong>
+                                <div class="error-message">${this.escapeHtml(error.error)}</div>
+                            </div>`
                         ).join('')}
                     </div>
                 </div>`;
@@ -233,13 +250,14 @@ class SecurePhotoFileManagerApp {
 
         resultsHTML += `
             <div class="result-section">
-                <h5>🎯 正常に処理されたデータの特徴</h5>
+                <h5>🎯 新仕様処理内容</h5>
                 <ul>
-                    <li>✅ 写真区分「P」のファイルのみを処理</li>
-                    <li>✅ 単位変換を適用（g ⇄ kg）</li>
-                    <li>✅ ID変換を適用（素材ID→素材名、加工ID→加工方法名）</li>
-                    <li>✅ 特記事項変換を適用（0→なし、1→あり）</li>
-                    <li>✅ スプレッドシートの既存データに追記</li>
+                    <li>✅ P区分ファイル：スプレッドシートにデータ書き込み ＋ 「構成部品」列にハイパーリンク設定</li>
+                    <li>✅ M区分ファイル：対応するP区分行の「素材」列にハイパーリンク設定</li>
+                    <li>✅ ID変換適用（素材ID→素材名、加工ID→加工方法名）</li>
+                    <li>✅ 単位変換適用（g ⇄ kg）</li>
+                    <li>✅ 特記事項変換適用（0→なし、1→あり）</li>
+                    <li>✅ Googleドライブ写真へのダイレクトリンク設定</li>
                 </ul>
             </div>
         `;
@@ -251,7 +269,7 @@ class SecurePhotoFileManagerApp {
         statusElement.className = 'status-message status-success';
         statusElement.innerHTML = `
             <div style="display: flex; align-items: center; gap: 10px;">
-                <span>✅ 処理完了！${result.writtenCount}件のデータをスプレッドシートに書き込みました</span>
+                <span>✅ 処理完了！P区分${result.writtenCount}件書き込み、ハイパーリンク${result.hyperlinkCount || 0}個設定</span>
             </div>
         `;
     }

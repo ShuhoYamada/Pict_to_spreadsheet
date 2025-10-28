@@ -450,53 +450,120 @@ class SecureAPIManager {
         }
     }
 
-    // 新仕様に基づくデータ処理と書き込み
+    // ハイパーリンクをスプレッドシートのセルに設定
+    async setHyperlinkToCell(spreadsheetId, sheetName, cellAddress, url, displayText) {
+        try {
+            const response = await fetch(`${CONFIG.API_BASE_URL}/api/spreadsheets/${spreadsheetId}/set-hyperlink`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    sheetName: sheetName,
+                    cellAddress: cellAddress,
+                    url: url,
+                    displayText: displayText
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('ハイパーリンク設定エラー:', error);
+            throw new Error('ハイパーリンクの設定に失敗しました: ' + error.message);
+        }
+    }
+
+    // 写真ファイルの共有リンクを取得
+    async getPhotoShareLink(fileId) {
+        try {
+            const response = await fetch(`${CONFIG.API_BASE_URL}/api/files/${fileId}/sharelink`, {
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('写真共有リンク取得エラー:', error);
+            throw new Error('写真の共有リンク取得に失敗しました: ' + error.message);
+        }
+    }
+
+    // ヘッダー列の位置を特定
+    findColumnIndex(headers, targetColumns) {
+        for (const targetColumn of targetColumns) {
+            const index = headers.findIndex(header => 
+                header && header.toString().toLowerCase().includes(targetColumn.toLowerCase())
+            );
+            if (index !== -1) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    // 新仕様に基づくデータ処理と書き込み（写真区分による分岐処理とハイパーリンク設定対応）
     async processAndWriteData(spreadsheetId, photoFiles, materialMapping, processMapping) {
         try {
             // ファイル名解析
             const parser = new FileNameParser();
             const parseResults = parser.parseMultipleFiles(photoFiles);
             
-            // 処理対象外（M）と無効ファイルをフィルタリング
-            const validFiles = parseResults.valid.filter(parsed => !parsed.shouldSkip);
-            const skippedFiles = parseResults.valid.filter(parsed => parsed.shouldSkip);
+            // P区分とM区分に分類
+            const pTypeFiles = parseResults.valid.filter(parsed => parsed.photoType === 'p');
+            const mTypeFiles = parseResults.valid.filter(parsed => parsed.isPhotoTypeM);
             
             // 番号順にソート（昇順：1,2,3,4...）
-            validFiles.sort((a, b) => a.number - b.number);
+            pTypeFiles.sort((a, b) => a.number - b.number);
+            mTypeFiles.sort((a, b) => a.number - b.number);
             
-            console.log(`📊 解析結果: 全${photoFiles.length}件 -> 有効${validFiles.length}件, スキップ${skippedFiles.length}件, 無効${parseResults.invalid.length}件`);
-            console.log('📂 ソート後のファイル順序:', validFiles.map(f => `${f.numberString}(${f.number})`).join(', '));
-
-            if (validFiles.length === 0) {
-                throw new Error('処理対象のファイルがありません');
+            console.log(`📊 解析結果: 全${photoFiles.length}件 -> P区分${pTypeFiles.length}件, M区分${mTypeFiles.length}件, 無効${parseResults.invalid.length}件`);
+            console.log(`📊 P区分ファイル詳細:`, pTypeFiles.map(f => `${f.fileName} (番号: ${f.number}, 部品: ${f.partName})`));
+            console.log(`📊 M区分ファイル詳細:`, mTypeFiles.map(f => `${f.fileName} (番号: ${f.number}, 部品: ${f.partName})`));
+            
+            if (pTypeFiles.length === 0) {
+                throw new Error('処理対象のP区分ファイルがありません');
             }
 
-            // スプレッドシートのヘッダー情報を取得（一番左のシート）
+            // スプレッドシートのヘッダー情報を取得
             const headerResponse = await this.getSpreadsheetHeaders(spreadsheetId);
             const headers = headerResponse.headers || [];
+            const sheetName = headerResponse.sheetName || 'シート1';
             
-            console.log('📊 ヘッダーレスポンス:', headerResponse);
             console.log('📊 スプレッドシートヘッダー:', headers);
+            console.log('📊 対象シート名:', sheetName);
             
-            // ヘッダーが配列でない場合のエラーハンドリング
-            if (!Array.isArray(headers)) {
-                throw new Error('スプレッドシートのヘッダー形式が無効です');
-            }
-            
-            if (headers.length === 0) {
+            if (!Array.isArray(headers) || headers.length === 0) {
                 throw new Error('スプレッドシートにヘッダー行が見つかりません');
             }
             
-            // 列マッピングを生成（新しい仕様に対応）
+            // 重要列の位置を特定
+            const partColumnIndex = this.findColumnIndex(headers, ['構成部品', '部品', '部品名']);
+            const materialColumnIndex = this.findColumnIndex(headers, ['素材', '材料']);
+            
+            console.log(`📊 列位置: 構成部品=${partColumnIndex}, 素材=${materialColumnIndex}`);
+            
+            if (partColumnIndex === -1 || materialColumnIndex === -1) {
+                throw new Error('「構成部品」列または「素材」列が見つかりません');
+            }
+            
+            // 列マッピングを生成
             const columnMapping = {
                 fileName: headers.indexOf('ファイル名'),
-                partName: headers.indexOf('構成部品'),
+                partName: partColumnIndex,
                 weightInGrams: headers.indexOf('重量[g]'),
                 weightInKilograms: headers.indexOf('重量[kg]'),
-                materialId: headers.indexOf('ID'),              // 素材IDをID列に
+                materialId: headers.indexOf('ID'),
                 processId: headers.indexOf('加工ID'),
-                materialCategory: headers.indexOf('素材'),        // 素材区分を素材列に
-                materialName: headers.indexOf('項目名'),          // 素材名を項目名列に
+                materialCategory: materialColumnIndex,
+                materialName: headers.indexOf('項目名'),
                 processName: headers.indexOf('加工方法'),
                 notesText: headers.indexOf('特記事項'),
                 originalUnit: headers.indexOf('元の単位')
@@ -504,9 +571,8 @@ class SecureAPIManager {
             
             console.log('📊 列マッピング:', columnMapping);
             
-            // データを変換して送信
-            const processedData = validFiles.map(parsed => {
-                // 素材データを取得（素材名と素材区分）
+            // P区分ファイルのデータを変換
+            const processedData = pTypeFiles.map(parsed => {
                 const materialData = materialMapping ? 
                     (materialMapping[parsed.materialId] || { name: '該当なし', category: '該当なし' }) :
                     { name: '該当なし', category: '該当なし' };
@@ -516,19 +582,20 @@ class SecureAPIManager {
                     partName: parsed.partName,
                     weightInGrams: parsed.weightInGrams,
                     weightInKilograms: parsed.weightInKilograms,
-                    materialId: parsed.materialId,               // 素材IDそのもの
+                    materialId: parsed.materialId,
                     processId: parsed.processId,
                     notesText: parsed.notesText,
                     originalUnit: parsed.unit,
-                    // 素材関連の変換
-                    materialName: materialData.name,             // 素材名（項目名列用）
-                    materialCategory: materialData.category,     // 素材区分（素材列用）
-                    // 加工ID変換
-                    processName: processMapping ? processMapping[parsed.processId] || '該当なし' : '該当なし'
+                    materialName: materialData.name,
+                    materialCategory: materialData.category,
+                    processName: processMapping ? processMapping[parsed.processId] || '該当なし' : '該当なし',
+                    // 写真情報を追加
+                    photoId: parsed.fileInfo.id,
+                    photoName: parsed.fileName
                 };
             });
 
-            // サーバーに送信
+            // P区分データをスプレッドシートに書き込み
             const response = await fetch(`${CONFIG.API_BASE_URL}/api/spreadsheets/${spreadsheetId}/write-advanced`, {
                 method: 'POST',
                 headers: {
@@ -546,16 +613,165 @@ class SecureAPIManager {
                 throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
             }
             
-            const result = await response.json();
+            const writeResult = await response.json();
+            console.log('📊 P区分データ書き込み完了:', writeResult);
+            
+            // 書き込み完了後にハイパーリンクを設定
+            let hyperlinkCount = 0;
+            let hyperlinkErrors = [];
+            
+            // サーバーから返された実際の書き込み開始行を使用
+            const startRow = writeResult.actualStartRow || 2;
+            
+            console.log(`📊 サーバーから取得した実際の書き込み開始行: ${startRow}`);
+            console.log(`📊 P区分ファイル数: ${pTypeFiles.length}`);
+            
+            // P区分ファイルにハイパーリンクを設定（構成部品列）
+            for (let i = 0; i < pTypeFiles.length; i++) {
+                const pFile = pTypeFiles[i];
+                const rowIndex = startRow + i;
+                const partCellAddress = `${String.fromCharCode(65 + partColumnIndex)}${rowIndex}`;
+                
+                try {
+                    console.log(`🔗 P区分ハイパーリンク設定詳細:`);
+                    console.log(`   - P区分ファイル: ${pFile.fileName}`);
+                    console.log(`   - インデックス: ${i}`);
+                    console.log(`   - 書き込み開始行: ${startRow}`);
+                    console.log(`   - 計算された行番号: ${rowIndex}`);
+                    console.log(`   - 構成部品列セルアドレス: ${partCellAddress}`);
+                    
+                    // 写真の共有リンクを取得
+                    const shareLink = await this.getPhotoShareLink(pFile.fileInfo.id);
+                    
+                    // 構成部品列にハイパーリンクを設定（部品名を表示テキストとして使用）
+                    await this.setHyperlinkToCell(
+                        spreadsheetId, 
+                        sheetName, 
+                        partCellAddress, 
+                        shareLink.shareLink, 
+                        pFile.partName  // P区分は部品名を表示テキストとして使用
+                    );
+                    
+                    hyperlinkCount++;
+                    console.log(`✅ P区分ハイパーリンク設定完了: ${partCellAddress}`);
+                    
+                    // API レート制限回避のため少し待機
+                    if (i < pTypeFiles.length - 1) { // 最後の要素でない場合のみ待機
+                        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms待機
+                    }
+                    
+                } catch (error) {
+                    console.error(`❌ P区分ハイパーリンク設定エラー (${pFile.fileName}):`, error);
+                    hyperlinkErrors.push({
+                        fileName: pFile.fileName,
+                        error: error.message,
+                        type: 'P区分'
+                    });
+                }
+            }
+            
+            // M区分ファイルにハイパーリンクを設定（素材列）
+            let mFileIndex = 0;
+            for (const mFile of mTypeFiles) {
+                try {
+                    console.log(`🔍 M区分ファイル処理開始: ${mFile.fileName} (番号: ${mFile.number}, 部品名: ${mFile.partName})`);
+                    console.log(`🔍 利用可能なP区分ファイル:`, pTypeFiles.map(p => `${p.fileName} (番号: ${p.number}, 部品名: ${p.partName})`));
+                    
+                    // 対応するP区分ファイルを探す（複数の条件で検索）
+                    let correspondingPFile = null;
+                    
+                    // 1. 番号ベースで検索
+                    correspondingPFile = pTypeFiles.find(pFile => pFile.number === mFile.number);
+                    
+                    // 2. 番号が見つからない場合、部品名ベースで検索
+                    if (!correspondingPFile) {
+                        correspondingPFile = pTypeFiles.find(pFile => pFile.partName === mFile.partName);
+                        console.log(`🔍 番号一致なし、部品名で検索: ${correspondingPFile ? '見つかった' : '見つからない'}`);
+                    }
+                    
+                    // 3. 部品名も見つからない場合、ファイル名のプレフィックスで検索
+                    if (!correspondingPFile) {
+                        const mFilePrefix = mFile.fileName.split('_').slice(0, 2).join('_'); // 番号_部品名
+                        correspondingPFile = pTypeFiles.find(pFile => {
+                            const pFilePrefix = pFile.fileName.split('_').slice(0, 2).join('_');
+                            return pFilePrefix === mFilePrefix;
+                        });
+                        console.log(`🔍 プレフィックスで検索 (${mFilePrefix}): ${correspondingPFile ? '見つかった' : '見つからない'}`);
+                    }
+                    
+                    // 4. それでも見つからない場合、最後に処理されたP区分ファイルを使用
+                    if (!correspondingPFile && pTypeFiles.length > 0) {
+                        correspondingPFile = pTypeFiles[pTypeFiles.length - 1];
+                        console.log(`🔍 最後のP区分ファイルを使用: ${correspondingPFile.fileName}`);
+                    }
+                    
+                    if (!correspondingPFile) {
+                        console.warn(`⚠️ M区分ファイル ${mFile.fileName} に対応するP区分ファイルが見つかりません`);
+                        console.warn(`⚠️ デバッグ情報: M番号=${mFile.number}, M部品名=${mFile.partName}`);
+                        console.warn(`⚠️ P区分ファイル数: ${pTypeFiles.length}`);
+                        hyperlinkErrors.push({
+                            fileName: mFile.fileName,
+                            error: `対応するP区分ファイルが見つかりません (番号: ${mFile.number}, 部品名: ${mFile.partName})`,
+                            type: 'M区分'
+                        });
+                        continue;
+                    }
+                    
+                    const pFileIndex = pTypeFiles.indexOf(correspondingPFile);
+                    const rowIndex = startRow + pFileIndex;
+                    const materialCellAddress = `${String.fromCharCode(65 + materialColumnIndex)}${rowIndex}`;
+                    
+                    console.log(`🔗 M区分ハイパーリンク設定詳細:`);
+                    console.log(`   - M区分ファイル: ${mFile.fileName}`);
+                    console.log(`   - 対応P区分ファイル: ${correspondingPFile.fileName}`);
+                    console.log(`   - P区分インデックス: ${pFileIndex}`);
+                    console.log(`   - 書き込み開始行: ${startRow}`);
+                    console.log(`   - 計算された行番号: ${rowIndex}`);
+                    console.log(`   - 素材列セルアドレス: ${materialCellAddress}`);
+                    
+                    // 写真の共有リンクを取得
+                    const shareLink = await this.getPhotoShareLink(mFile.fileInfo.id);
+                    
+                    // セルの現在の値はサーバー側で取得するため、displayTextはnullにする
+                    console.log(`🔗 M区分ハイパーリンク設定: セルの現在値をサーバー側で取得`);
+                    
+                    // 素材列にハイパーリンクを設定（displayTextはnull = サーバー側で現在値を取得）
+                    await this.setHyperlinkToCell(
+                        spreadsheetId, 
+                        sheetName, 
+                        materialCellAddress, 
+                        shareLink.shareLink, 
+                        null  // サーバー側で現在のセル値を取得
+                    );
+                    
+                    hyperlinkCount++;
+                    console.log(`✅ M区分ハイパーリンク設定完了: ${materialCellAddress}`);
+                    
+                    // API レート制限回避のため少し待機
+                    mFileIndex++;
+                    if (mFileIndex < mTypeFiles.length) { // 最後の要素でない場合のみ待機
+                        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms待機
+                    }
+                    
+                } catch (error) {
+                    console.error(`❌ M区分ハイパーリンク設定エラー (${mFile.fileName}):`, error);
+                    hyperlinkErrors.push({
+                        fileName: mFile.fileName,
+                        error: error.message,
+                        type: 'M区分'
+                    });
+                }
+            }
             
             return {
                 success: true,
-                writtenCount: validFiles.length,
-                skippedCount: skippedFiles.length,
+                writtenCount: pTypeFiles.length,
+                hyperlinkCount: hyperlinkCount,
+                mTypeCount: mTypeFiles.length,
                 invalidCount: parseResults.invalid.length,
                 totalCount: photoFiles.length,
-                details: result,
-                skippedFiles: skippedFiles.map(f => f.fileName),
+                details: writeResult,
+                hyperlinkErrors: hyperlinkErrors,
                 invalidFiles: parseResults.invalid.map(f => ({ fileName: f.fileName, error: f.error }))
             };
 
