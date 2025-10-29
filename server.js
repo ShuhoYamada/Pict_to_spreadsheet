@@ -706,6 +706,8 @@ app.post('/api/spreadsheets/:spreadsheetId/set-hyperlink', async (req, res) => {
   
   try {
     console.log(`🔗 ハイパーリンク設定開始: ${cellAddress} -> ${url}`);
+    console.log(`🔗 リクエストボディ詳細:`, req.body);
+    console.log(`🔗 リクエスト元IP: ${req.ip}`);
     
     // 入力検証
     if (!cellAddress || !url) {
@@ -727,6 +729,8 @@ app.post('/api/spreadsheets/:spreadsheetId/set-hyperlink', async (req, res) => {
     const column = match[1];
     const row = parseInt(match[2]);
     
+    console.log(`🔗 セルアドレス解析: 列=${column}, 行=${row}`);
+    
     // 列文字を数値に変換 (A=0, B=1, ...)
     let columnIndex = 0;
     for (let i = 0; i < column.length; i++) {
@@ -744,6 +748,8 @@ app.post('/api/spreadsheets/:spreadsheetId/set-hyperlink', async (req, res) => {
       targetSheetName = initialMetadataResponse.data.sheets[0].properties.title;
     }
     
+    console.log(`🔗 対象シート名: ${targetSheetName}`);
+    
     // シートIDを取得
     const sheetMetadataResponse = await sheets.spreadsheets.get({
       spreadsheetId,
@@ -758,6 +764,32 @@ app.post('/api/spreadsheets/:spreadsheetId/set-hyperlink', async (req, res) => {
       return res.status(404).json({ 
         error: `シート '${targetSheetName}' が見つかりません`,
         availableSheets: sheetMetadataResponse.data.sheets.map(s => s.properties.title)
+      });
+    }
+    
+    // シートの行数と列数を取得してセルアドレスが有効かチェック
+    const sheetProperties = hyperlinkTargetSheet.properties;
+    const maxRows = sheetProperties.gridProperties?.rowCount || 1000;
+    const maxCols = sheetProperties.gridProperties?.columnCount || 26;
+    
+    console.log(`🔗 シート情報: 最大行数=${maxRows}, 最大列数=${maxCols}, 指定行=${row}, 指定列インデックス=${columnIndex + 1}`);
+    
+    // 行と列の範囲チェック
+    if (row > maxRows) {
+      return res.status(400).json({ 
+        error: `指定された行 ${row} がシートの最大行数 ${maxRows} を超えています`,
+        cellAddress,
+        sheetName: targetSheetName,
+        sheetInfo: { maxRows, maxCols }
+      });
+    }
+    
+    if (columnIndex + 1 > maxCols) {
+      return res.status(400).json({ 
+        error: `指定された列 ${column} (インデックス ${columnIndex + 1}) がシートの最大列数 ${maxCols} を超えています`,
+        cellAddress,
+        sheetName: targetSheetName,
+        sheetInfo: { maxRows, maxCols }
       });
     }
     
@@ -847,7 +879,7 @@ app.post('/api/spreadsheets/:spreadsheetId/set-hyperlink', async (req, res) => {
     // リトライメカニズム付きでハイパーリンク設定を実行
     let result;
     let retryCount = 0;
-    const maxRetries = 3;
+    const maxRetries = 5;
     
     while (retryCount < maxRetries) {
       try {
@@ -867,9 +899,9 @@ app.post('/api/spreadsheets/:spreadsheetId/set-hyperlink', async (req, res) => {
           throw retryError;
         }
         
-        // リトライ前に少し待機（指数バックオフ）
-        const waitTime = Math.pow(2, retryCount) * 1000; // 2秒, 4秒, 8秒
-        console.log(`⏳ ${waitTime/1000}秒待機してリトライします...`);
+        // エクスポネンシャル・バックオフ：1秒, 2秒, 4秒, 8秒, 16秒
+        const waitTime = Math.pow(2, retryCount - 1) * 1000;
+        console.log(`⏳ ${waitTime/1000}秒待機してリトライします... (エクスポネンシャル・バックオフ)`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }

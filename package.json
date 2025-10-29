@@ -1,7 +1,7 @@
 {
   "name": "photo-file-manager",
-  "version": "1.0.0",
-  "description": "Secure photo file management system with Google APIs",
+  "version": "2.1.0",
+  "description": "Secure photo file management system with Google APIs and hyperlink features",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

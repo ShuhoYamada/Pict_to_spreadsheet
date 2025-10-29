@@ -9,6 +9,14 @@
 - `config.js` - APIキーが設定されている場合
 - `node_modules/` - 依存関係フォルダ
 
+## 🆕 最新機能 (v2.1.0)
+
+### 🔗 写真ハイパーリンク機能
+- **P区分写真**: 構成部品列に自動でハイパーリンクを設定
+- **M区分写真**: 対応するP区分行の素材列にハイパーリンクを設定
+- **セル内容保護**: 既存のテキストを上書きしない安全な設計
+- **自動共有設定**: Google Driveファイルの共有設定を自動で有効化
+
 ## 🚀 初回セットアップ手順
 
 ### 1. 依存関係のインストール
@@ -28,8 +36,8 @@ cp .env.template .env
 ### 3. Google Cloud Console設定
 
 #### 必要なAPI
-- Google Drive API
-- Google Sheets API
+- Google Drive API（ファイル読み込み、共有設定、ハイパーリンク用）
+- Google Sheets API（データ書き込み、ハイパーリンク設定用）
 
 #### OAuth 2.0設定
 - 承認済みのJavaScriptドメイン: `http://localhost:3000`
@@ -60,6 +68,7 @@ python start_server.py
 1. **認証エラー**: OAuth設定を確認
 2. **API制限エラー**: Google Cloud Consoleでクォータを確認
 3. **ポート競合**: PORT環境変数を変更
+4. **ハイパーリンク設定エラー**: Google Drive APIのレート制限の可能性、時間をおいて再実行
 
 ## 📞 サポート
 

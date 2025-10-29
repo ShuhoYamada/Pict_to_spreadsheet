@@ -450,31 +450,59 @@ class SecureAPIManager {
         }
     }
 
-    // ハイパーリンクをスプレッドシートのセルに設定
+    // ハイパーリンクをスプレッドシートのセルに設定（エクスポネンシャル・バックオフ付き）
     async setHyperlinkToCell(spreadsheetId, sheetName, cellAddress, url, displayText) {
-        try {
-            const response = await fetch(`${CONFIG.API_BASE_URL}/api/spreadsheets/${spreadsheetId}/set-hyperlink`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'include',
-                body: JSON.stringify({
-                    sheetName: sheetName,
-                    cellAddress: cellAddress,
-                    url: url,
-                    displayText: displayText
-                })
-            });
-            
-            if (!response.ok) {
+        const maxRetries = 5;
+        let retryCount = 0;
+        
+        while (retryCount < maxRetries) {
+            try {
+                const response = await fetch(`${CONFIG.API_BASE_URL}/api/spreadsheets/${spreadsheetId}/set-hyperlink`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        sheetName: sheetName,
+                        cellAddress: cellAddress,
+                        url: url,
+                        displayText: displayText
+                    })
+                });
+                
+                if (response.ok) {
+                    // 成功した場合
+                    const result = await response.json();
+                    if (retryCount > 0) {
+                        console.log(`✅ ハイパーリンク設定成功 (${retryCount + 1}回目の試行): ${cellAddress}`);
+                    }
+                    return result;
+                }
+                
+                // 500エラーの場合はリトライ対象
+                if (response.status === 500) {
+                    throw new Error(`HTTP 500: Internal Server Error`);
+                }
+                
+                // その他のエラーはリトライしない
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                
+            } catch (error) {
+                retryCount++;
+                
+                // 500エラー以外、または最大リトライ回数に達した場合
+                if (!error.message.includes('HTTP 500') || retryCount >= maxRetries) {
+                    console.error(`❌ ハイパーリンク設定エラー (最終失敗, ${retryCount}回試行): ${cellAddress}`, error);
+                    throw new Error('ハイパーリンクの設定に失敗しました: ' + error.message);
+                }
+                
+                // エクスポネンシャル・バックオフ：1秒, 2秒, 4秒, 8秒, 16秒
+                const waitTime = Math.pow(2, retryCount - 1) * 1000;
+                console.warn(`⚠️ ハイパーリンク設定失敗 (${retryCount}/${maxRetries}回目): ${cellAddress} - ${waitTime/1000}秒後にリトライ`);
+                
+                await new Promise(resolve => setTimeout(resolve, waitTime));
             }
-            
-            return await response.json();
-        } catch (error) {
-            console.error('ハイパーリンク設定エラー:', error);
-            throw new Error('ハイパーリンクの設定に失敗しました: ' + error.message);
         }
     }
 
@@ -655,11 +683,6 @@ class SecureAPIManager {
                     hyperlinkCount++;
                     console.log(`✅ P区分ハイパーリンク設定完了: ${partCellAddress}`);
                     
-                    // API レート制限回避のため少し待機
-                    if (i < pTypeFiles.length - 1) { // 最後の要素でない場合のみ待機
-                        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms待機
-                    }
-                    
                 } catch (error) {
                     console.error(`❌ P区分ハイパーリンク設定エラー (${pFile.fileName}):`, error);
                     hyperlinkErrors.push({
@@ -674,60 +697,91 @@ class SecureAPIManager {
             let mFileIndex = 0;
             for (const mFile of mTypeFiles) {
                 try {
-                    console.log(`🔍 M区分ファイル処理開始: ${mFile.fileName} (番号: ${mFile.number}, 部品名: ${mFile.partName})`);
-                    console.log(`🔍 利用可能なP区分ファイル:`, pTypeFiles.map(p => `${p.fileName} (番号: ${p.number}, 部品名: ${p.partName})`));
+                    console.log(`🔍 M区分ペア処理開始: ${mFile.fileName} (${mFileIndex + 1}/${mTypeFiles.length})`);
+                    console.log(`🔍 M区分詳細: ペア番号=${mFile.number}, 部品名=${mFile.partName}`);
+                    console.log(`🔍 探索対象P区分番号:`, pTypeFiles.map(p => p.number).sort((a, b) => a - b));
                     
-                    // 対応するP区分ファイルを探す（複数の条件で検索）
+                    // 対応するP区分ファイルを探す（ペア番号ベースで検索）
                     let correspondingPFile = null;
                     
-                    // 1. 番号ベースで検索
+                    // ペア形式（1,1,2,2,3,3...）では番号で完全一致検索
                     correspondingPFile = pTypeFiles.find(pFile => pFile.number === mFile.number);
+                    console.log(`🔍 ペア番号で検索 (番号: ${mFile.number}): ${correspondingPFile ? '見つかった' : '見つからない'}`);
                     
-                    // 2. 番号が見つからない場合、部品名ベースで検索
-                    if (!correspondingPFile) {
-                        correspondingPFile = pTypeFiles.find(pFile => pFile.partName === mFile.partName);
-                        console.log(`🔍 番号一致なし、部品名で検索: ${correspondingPFile ? '見つかった' : '見つからない'}`);
-                    }
-                    
-                    // 3. 部品名も見つからない場合、ファイル名のプレフィックスで検索
-                    if (!correspondingPFile) {
-                        const mFilePrefix = mFile.fileName.split('_').slice(0, 2).join('_'); // 番号_部品名
-                        correspondingPFile = pTypeFiles.find(pFile => {
-                            const pFilePrefix = pFile.fileName.split('_').slice(0, 2).join('_');
-                            return pFilePrefix === mFilePrefix;
-                        });
-                        console.log(`🔍 プレフィックスで検索 (${mFilePrefix}): ${correspondingPFile ? '見つかった' : '見つからない'}`);
-                    }
-                    
-                    // 4. それでも見つからない場合、最後に処理されたP区分ファイルを使用
-                    if (!correspondingPFile && pTypeFiles.length > 0) {
-                        correspondingPFile = pTypeFiles[pTypeFiles.length - 1];
-                        console.log(`🔍 最後のP区分ファイルを使用: ${correspondingPFile.fileName}`);
+                    if (correspondingPFile) {
+                        console.log(`✅ ペア確認: M区分 ${mFile.fileName} ↔ P区分 ${correspondingPFile.fileName}`);
                     }
                     
                     if (!correspondingPFile) {
-                        console.warn(`⚠️ M区分ファイル ${mFile.fileName} に対応するP区分ファイルが見つかりません`);
-                        console.warn(`⚠️ デバッグ情報: M番号=${mFile.number}, M部品名=${mFile.partName}`);
-                        console.warn(`⚠️ P区分ファイル数: ${pTypeFiles.length}`);
+                        console.error(`❌ M区分ファイル ${mFile.fileName} のペアP区分ファイルが見つかりません`);
+                        console.error(`❌ ペア番号: ${mFile.number}`);
+                        console.error(`❌ 利用可能なP区分番号:`, pTypeFiles.map(p => p.number).sort((a, b) => a - b));
+                        console.error(`❌ 期待されるペアファイル名: ${mFile.number}_*_P_*.jpg`);
                         hyperlinkErrors.push({
                             fileName: mFile.fileName,
-                            error: `対応するP区分ファイルが見つかりません (番号: ${mFile.number}, 部品名: ${mFile.partName})`,
+                            error: `ペアのP区分ファイルが見つかりません (番号: ${mFile.number})`,
+                            type: 'M区分ペアエラー'
+                        });
+                        continue;
+                    }
+                    
+                    // pFileIndexを取得
+                    const pFileIndex = pTypeFiles.indexOf(correspondingPFile);
+                    
+                    // pFileIndexの妥当性チェック
+                    if (pFileIndex < 0 || pFileIndex >= pTypeFiles.length) {
+                        console.error(`❌ P区分ファイルインデックスが不正: ${pFileIndex} (範囲: 0-${pTypeFiles.length - 1})`);
+                        hyperlinkErrors.push({
+                            fileName: mFile.fileName,
+                            error: `P区分ファイルインデックスが不正です (${pFileIndex})`,
                             type: 'M区分'
                         });
                         continue;
                     }
                     
-                    const pFileIndex = pTypeFiles.indexOf(correspondingPFile);
                     const rowIndex = startRow + pFileIndex;
+                    
+                    // 素材列インデックスの検証
+                    if (materialColumnIndex === -1 || materialColumnIndex === undefined || materialColumnIndex === null) {
+                        console.error(`❌ 素材列インデックスが無効: ${materialColumnIndex}`);
+                        hyperlinkErrors.push({
+                            fileName: mFile.fileName,
+                            error: `素材列が見つかりません (インデックス: ${materialColumnIndex})`,
+                            type: 'M区分'
+                        });
+                        continue;
+                    }
+                    
+                    if (typeof materialColumnIndex !== 'number' || materialColumnIndex < 0) {
+                        console.error(`❌ 素材列インデックスが数値でないか負の値: ${materialColumnIndex} (型: ${typeof materialColumnIndex})`);
+                        hyperlinkErrors.push({
+                            fileName: mFile.fileName,
+                            error: `素材列インデックスが不正です (${materialColumnIndex})`,
+                            type: 'M区分'
+                        });
+                        continue;
+                    }
+                    
                     const materialCellAddress = `${String.fromCharCode(65 + materialColumnIndex)}${rowIndex}`;
                     
-                    console.log(`🔗 M区分ハイパーリンク設定詳細:`);
-                    console.log(`   - M区分ファイル: ${mFile.fileName}`);
-                    console.log(`   - 対応P区分ファイル: ${correspondingPFile.fileName}`);
-                    console.log(`   - P区分インデックス: ${pFileIndex}`);
-                    console.log(`   - 書き込み開始行: ${startRow}`);
-                    console.log(`   - 計算された行番号: ${rowIndex}`);
-                    console.log(`   - 素材列セルアドレス: ${materialCellAddress}`);
+                    console.log(`🔗 ペアハイパーリンク設定詳細:`);
+                    console.log(`   - Mファイル: ${mFile.fileName} (ペア番号: ${mFile.number})`);
+                    console.log(`   - ペアPファイル: ${correspondingPFile.fileName} (番号: ${correspondingPFile.number})`);
+                    console.log(`   - P区分のスプレッドシート行インデックス: ${pFileIndex}`);
+                    console.log(`   - P区分のスプレッドシート行番号: ${rowIndex}`);
+                    console.log(`   - 素材列インデックス: ${materialColumnIndex} (型: ${typeof materialColumnIndex})`);
+                    console.log(`   - M写真リンク設定先セル: ${materialCellAddress} (P区分行の素材列)`);
+                    
+                    // 行番号の妥当性チェック
+                    if (rowIndex <= 0 || rowIndex > 1000) {
+                        console.error(`❌ 計算された行番号が範囲外: ${rowIndex} (1-1000の範囲を期待)`);
+                        hyperlinkErrors.push({
+                            fileName: mFile.fileName,
+                            error: `計算された行番号が範囲外です (${rowIndex})`,
+                            type: 'M区分'
+                        });
+                        continue;
+                    }
                     
                     // 写真の共有リンクを取得
                     const shareLink = await this.getPhotoShareLink(mFile.fileInfo.id);
@@ -745,20 +799,17 @@ class SecureAPIManager {
                     );
                     
                     hyperlinkCount++;
-                    console.log(`✅ M区分ハイパーリンク設定完了: ${materialCellAddress}`);
+                    console.log(`✅ ペアハイパーリンク設定完了: M区分(${mFile.number}) → P区分行の素材列(${materialCellAddress})`);
                     
-                    // API レート制限回避のため少し待機
                     mFileIndex++;
-                    if (mFileIndex < mTypeFiles.length) { // 最後の要素でない場合のみ待機
-                        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms待機
-                    }
                     
                 } catch (error) {
-                    console.error(`❌ M区分ハイパーリンク設定エラー (${mFile.fileName}):`, error);
+                    console.error(`❌ ペアハイパーリンク設定エラー (${mFile.fileName}, ペア番号: ${mFile.number}):`, error);
                     hyperlinkErrors.push({
                         fileName: mFile.fileName,
                         error: error.message,
-                        type: 'M区分'
+                        type: 'M区分ペア処理',
+                        pairNumber: mFile.number
                     });
                 }
             }
