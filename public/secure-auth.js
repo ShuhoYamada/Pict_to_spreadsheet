@@ -18,13 +18,26 @@ class SecureAuthManager {
     }
 
     setupEventListeners() {
-        document.getElementById('authorize-button').addEventListener('click', () => {
-            this.signIn();
-        });
+        const authorizeButton = document.getElementById('authorize-button');
+        const signoutButton = document.getElementById('signout-button');
+        
+        if (authorizeButton) {
+            authorizeButton.addEventListener('click', () => {
+                this.signIn();
+            });
+            console.log('✅ 認証ボタンのイベントリスナーを登録しました');
+        } else {
+            console.error('❌ authorize-button が見つかりません');
+        }
 
-        document.getElementById('signout-button').addEventListener('click', () => {
-            this.signOut();
-        });
+        if (signoutButton) {
+            signoutButton.addEventListener('click', () => {
+                this.signOut();
+            });
+            console.log('✅ サインアウトボタンのイベントリスナーを登録しました');
+        } else {
+            console.error('❌ signout-button が見つかりません');
+        }
         
         // URLパラメータから認証結果をチェック
         const urlParams = new URLSearchParams(window.location.search);
@@ -169,5 +182,6 @@ function showMessage(message, type = 'info') {
     }
 }
 
-// セキュア認証マネージャーのインスタンス化
-let authManager;
+// セキュア認証マネージャーのグローバル変数（DOMContentLoadedで初期化）
+let authManager = null;
+
