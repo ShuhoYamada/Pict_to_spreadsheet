@@ -124,43 +124,76 @@ app.get('/auth/callback', async (req, res) => {
 // ルートフォルダ一覧取得
 app.get('/api/folders', async (req, res) => {
   try {
-    console.log('📁 ルートフォルダ取得開始');
+    console.log('📁 ルートレベルフォルダ取得開始');
     
-    // まず、すべてのフォルダを取得してみる（デバッグ用）
-    console.log('🔍 デバッグ: 全フォルダ検索中...');
-    const allFoldersResponse = await drive.files.list({
-      q: "mimeType='application/vnd.google-apps.folder' and trashed=false",
-      pageSize: 50,
-      fields: 'files(id,name,parents,modifiedTime)',
-      orderBy: 'name'
-    });
-    
-    console.log(`🔍 デバッグ: 全フォルダ数 ${allFoldersResponse.data.files?.length || 0} 個`);
-    
-    if (allFoldersResponse.data.files && allFoldersResponse.data.files.length > 0) {
-      console.log('🔍 最初の5個のフォルダ:');
-      allFoldersResponse.data.files.slice(0, 5).forEach((folder, index) => {
-        console.log(`  ${index + 1}. ${folder.name} (ID: ${folder.id}, Parents: ${folder.parents || 'なし'})`);
-      });
-    }
-    
-    // ルートフォルダのみを取得
-    const rootFoldersResponse = await drive.files.list({
+    // マイドライブのルートフォルダを取得
+    console.log('🔍 マイドライブのルートフォルダを検索中...');
+    const myDriveResponse = await drive.files.list({
       q: "mimeType='application/vnd.google-apps.folder' and trashed=false and 'root' in parents",
       pageSize: 1000,
       fields: 'files(id,name,parents,modifiedTime)',
       orderBy: 'name'
     });
     
-    console.log(`✅ ルートフォルダ ${rootFoldersResponse.data.files?.length || 0} 個取得`);
+    console.log(`✅ マイドライブのルートフォルダ ${myDriveResponse.data.files?.length || 0} 個取得`);
     
-    // すべてのフォルダを返す（暫定的にデバッグのため）
-    const foldersToReturn = rootFoldersResponse.data.files?.length > 0 
-      ? rootFoldersResponse.data.files 
-      : allFoldersResponse.data.files || [];
+    // 共有ドライブのフォルダを取得
+    console.log('🔍 共有ドライブのフォルダを検索中...');
+    let sharedDriveFolders = [];
+    try {
+      const sharedDrivesResponse = await drive.drives.list({
+        pageSize: 100,
+        fields: 'drives(id,name)'
+      });
+      
+      if (sharedDrivesResponse.data.drives && sharedDrivesResponse.data.drives.length > 0) {
+        console.log(`🔍 共有ドライブ ${sharedDrivesResponse.data.drives.length} 個発見`);
+        
+        // 各共有ドライブをフォルダとして扱う
+        sharedDriveFolders = sharedDrivesResponse.data.drives.map(drive => ({
+          id: drive.id,
+          name: `📂 ${drive.name} (共有ドライブ)`,
+          modifiedTime: new Date().toISOString(),
+          isSharedDrive: true
+        }));
+      }
+    } catch (sharedDriveError) {
+      console.log('ℹ️ 共有ドライブへのアクセス権限がないか、利用できません');
+    }
     
-    console.log(`📤 返すフォルダ数: ${foldersToReturn.length}`);
-    res.json(foldersToReturn);
+    // 自分と共有されているフォルダ（親フォルダがないもの）を取得
+    console.log('🔍 共有フォルダを検索中...');
+    const sharedFoldersResponse = await drive.files.list({
+      q: "mimeType='application/vnd.google-apps.folder' and trashed=false and sharedWithMe=true",
+      pageSize: 1000,
+      fields: 'files(id,name,parents,modifiedTime,shared,owners)',
+      orderBy: 'name'
+    });
+    
+    // 親フォルダを持たない共有フォルダのみをトップレベルに表示
+    const topLevelSharedFolders = sharedFoldersResponse.data.files?.filter(folder => 
+      !folder.parents || folder.parents.length === 0
+    ) || [];
+    
+    console.log(`✅ トップレベル共有フォルダ ${topLevelSharedFolders.length} 個取得`);
+    
+    // 共有フォルダに所有者情報を追加
+    const sharedFoldersWithOwner = topLevelSharedFolders.map(folder => ({
+      ...folder,
+      name: `🔗 ${folder.name} (共有)`,
+      ownerName: folder.owners && folder.owners[0] ? folder.owners[0].displayName : '不明'
+    }));
+    
+    // すべてのフォルダを統合
+    const allFolders = [
+      ...myDriveResponse.data.files || [],
+      ...sharedDriveFolders,
+      ...sharedFoldersWithOwner
+    ];
+    
+    console.log(`📤 返すフォルダ数: ${allFolders.length} (マイドライブ: ${myDriveResponse.data.files?.length || 0}, 共有ドライブ: ${sharedDriveFolders.length}, 共有フォルダ: ${sharedFoldersWithOwner.length})`);
+    
+    res.json(allFolders);
   } catch (error) {
     console.error('ルートフォルダ取得エラー:', error);
     console.error('エラー詳細:', error.message);
@@ -174,25 +207,67 @@ app.get('/api/folders/:parentId/subfolders', async (req, res) => {
   
   try {
     console.log(`📁 サーバー: サブフォルダ取得リクエスト受信 (parentId: ${parentId})`);
-    console.log(`🔍 クエリ: '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
     
-    const response = await drive.files.list({
-      q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      pageSize: 1000,
-      fields: 'files(id,name,parents,modifiedTime)',
-      orderBy: 'name'
-    });
+    let subfolders = [];
     
-    console.log(`✅ サーバー: サブフォルダ ${response.data.files?.length || 0} 個取得`);
+    // 共有ドライブの場合は特別な処理
+    // 共有ドライブIDかどうかを判定（通常のフォルダIDと形式が異なる場合がある）
+    let isSharedDrive = false;
     
-    if (response.data.files && response.data.files.length > 0) {
+    try {
+      // まず通常のフォルダとして処理
+      console.log(`🔍 クエリ: '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+      
+      const response = await drive.files.list({
+        q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        pageSize: 1000,
+        fields: 'files(id,name,parents,modifiedTime,driveId)',
+        orderBy: 'name',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+      
+      subfolders = response.data.files || [];
+      console.log(`✅ サーバー: サブフォルダ ${subfolders.length} 個取得`);
+      
+    } catch (firstError) {
+      console.log('ℹ️ 通常のフォルダとして取得できませんでした。共有ドライブとして再試行します。');
+      
+      // 共有ドライブのルートフォルダを取得
+      try {
+        const sharedDriveResponse = await drive.files.list({
+          q: `mimeType='application/vnd.google-apps.folder' and trashed=false`,
+          pageSize: 1000,
+          fields: 'files(id,name,parents,modifiedTime)',
+          orderBy: 'name',
+          driveId: parentId,
+          corpora: 'drive',
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true
+        });
+        
+        // ルートレベルのフォルダのみをフィルタ（parentsがない、またはdriveIdのみを持つもの）
+        subfolders = sharedDriveResponse.data.files?.filter(folder => 
+          !folder.parents || folder.parents.length === 0
+        ) || [];
+        
+        console.log(`✅ 共有ドライブのルートフォルダ ${subfolders.length} 個取得`);
+        isSharedDrive = true;
+        
+      } catch (sharedDriveError) {
+        console.error('❌ 共有ドライブとしても取得失敗:', sharedDriveError.message);
+        throw firstError; // 元のエラーをスロー
+      }
+    }
+    
+    if (subfolders.length > 0) {
       console.log('🔍 取得したサブフォルダ:');
-      response.data.files.slice(0, 3).forEach((folder, index) => {
+      subfolders.slice(0, 3).forEach((folder, index) => {
         console.log(`  ${index + 1}. ${folder.name} (ID: ${folder.id})`);
       });
     }
     
-    res.json(response.data.files || []);
+    res.json(subfolders);
   } catch (error) {
     console.error('サブフォルダ取得エラー:', error);
     console.error('エラー詳細:', error.message);
@@ -207,7 +282,8 @@ app.get('/api/folders/:folderId/info', async (req, res) => {
   try {
     const response = await drive.files.get({
       fileId: folderId,
-      fields: 'id,name,parents'
+      fields: 'id,name,parents,driveId',
+      supportsAllDrives: true
     });
     
     // 親フォルダの情報も取得してパンくずリストを作成
@@ -216,12 +292,18 @@ app.get('/api/folders/:folderId/info', async (req, res) => {
     
     // 最大10階層まで遡る（無限ループ防止）
     for (let i = 0; i < 10 && currentFolder.parents && currentFolder.parents[0] !== 'root'; i++) {
-      const parentResponse = await drive.files.get({
-        fileId: currentFolder.parents[0],
-        fields: 'id,name,parents'
-      });
-      breadcrumbs.unshift(parentResponse.data);
-      currentFolder = parentResponse.data;
+      try {
+        const parentResponse = await drive.files.get({
+          fileId: currentFolder.parents[0],
+          fields: 'id,name,parents',
+          supportsAllDrives: true
+        });
+        breadcrumbs.unshift(parentResponse.data);
+        currentFolder = parentResponse.data;
+      } catch (error) {
+        console.log('親フォルダ取得エラー（継続）:', error.message);
+        break; // エラーが発生したら終了
+      }
     }
     
     res.json({
@@ -239,14 +321,20 @@ app.get('/api/folders/:folderId/photos', async (req, res) => {
   const { folderId } = req.params;
   
   try {
+    console.log(`📷 写真ファイル取得開始 (folderId: ${folderId})`);
+    
     const photoExtensions = ['jpg', 'jpeg', 'png', 'heic'];
     const query = `'${folderId}' in parents and trashed=false and (${photoExtensions.map(ext => `name contains '.${ext}'`).join(' or ')})`;
+    
+    console.log(`🔍 クエリ: ${query}`);
     
     const response = await drive.files.list({
       q: query,
       pageSize: 1000,
       fields: 'files(id,name,size,modifiedTime,webViewLink)',
-      orderBy: 'name'
+      orderBy: 'name',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
     });
     
     const files = response.data.files.filter(file => {
@@ -254,10 +342,13 @@ app.get('/api/folders/:folderId/photos', async (req, res) => {
       return photoExtensions.some(ext => fileName.endsWith(`.${ext}`));
     });
     
+    console.log(`✅ 写真ファイル ${files.length} 個取得`);
+    
     res.json(files);
   } catch (error) {
     console.error('写真ファイル取得エラー:', error);
-    res.status(500).json({ error: '写真ファイルの取得に失敗しました' });
+    console.error('エラー詳細:', error.message);
+    res.status(500).json({ error: '写真ファイルの取得に失敗しました', details: error.message });
   }
 });
 
@@ -543,70 +634,52 @@ app.post('/api/spreadsheets/:spreadsheetId/write-advanced', async (req, res) => 
     const headers = headerResponse.data.values ? headerResponse.data.values[0] : [];
     console.log(`📡 スプレッドシートのヘッダー:`, headers);
     
-    // 各列の最終行を取得
-    const columnLastRows = {};
-    let actualStartRow = Infinity; // 実際の書き込み開始行を追跡
+    // 構成部品列の次の空行を取得（これを基準行とする）
+    const partColumnIndex = columnMapping['partName'];
+    let startRow = 2; // デフォルトは2行目
     
-    for (const [key, columnIndex] of Object.entries(columnMapping)) {
-      if (columnIndex !== -1 && columnIndex < headers.length) {
-        const columnLetter = String.fromCharCode(65 + columnIndex); // A, B, C...
-        try {
-          const columnResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: `${firstSheetName}!${columnLetter}:${columnLetter}`,
-            valueRenderOption: 'UNFORMATTED_VALUE'
-          });
-          
-          const columnValues = columnResponse.data.values || [];
-          const nextRow = columnValues.length + 1; // 次の空行
-          columnLastRows[key] = nextRow;
-          
-          // 実際の開始行を記録（最小値）
-          if (nextRow < actualStartRow) {
-            actualStartRow = nextRow;
-          }
-          
-          console.log(`📡 列${columnLetter}(${key})の最終行: ${nextRow}`);
-        } catch (columnError) {
-          console.warn(`📡 列${columnLetter}(${key})の読み取りエラー:`, columnError.message);
-          columnLastRows[key] = 2; // デフォルトで2行目から開始
-          if (2 < actualStartRow) {
-            actualStartRow = 2;
-          }
-        }
-      } else {
-        console.log(`📡 列${key}はスキップ: インデックス=${columnIndex}, ヘッダー数=${headers.length}`);
+    if (partColumnIndex !== -1 && partColumnIndex < headers.length) {
+      const partColumnLetter = String.fromCharCode(65 + partColumnIndex);
+      try {
+        const partColumnResponse = await sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: `${firstSheetName}!${partColumnLetter}:${partColumnLetter}`,
+          valueRenderOption: 'UNFORMATTED_VALUE'
+        });
+        
+        const partColumnValues = partColumnResponse.data.values || [];
+        startRow = partColumnValues.length + 1; // 次の空行
+        console.log(`📡 構成部品列(${partColumnLetter})の次の空行: ${startRow}`);
+      } catch (error) {
+        console.warn(`📡 構成部品列の読み取りエラー:`, error.message);
+        startRow = 2;
       }
+    } else {
+      console.warn(`📡 構成部品列が見つかりません。デフォルト行(2)から開始します。`);
     }
     
-    // 実際の開始行が設定されていない場合のフォールバック
-    if (actualStartRow === Infinity) {
-      actualStartRow = 2;
-    }
+    console.log(`📡 書き込み開始行（構成部品基準）: ${startRow}`);
     
-    console.log(`📡 実際の書き込み開始行: ${actualStartRow}`);
-    
-    // データを書き込み
+    // データを書き込み（全列を構成部品と同じ行に書き込む）
     const updateRequests = [];
+    let currentRow = startRow; // 構成部品列の空行から開始
     
     for (const rowData of data) {
       for (const [key, value] of Object.entries(rowData)) {
         const columnIndex = columnMapping[key];
-        if (columnIndex !== -1 && columnIndex < headers.length && columnLastRows[key]) {
+        if (columnIndex !== -1 && columnIndex < headers.length) {
           const columnLetter = String.fromCharCode(65 + columnIndex);
-          const row = columnLastRows[key];
           
           // 値が undefined や null でない場合のみ追加
           if (value !== undefined && value !== null) {
             updateRequests.push({
-              range: `${firstSheetName}!${columnLetter}${row}`,
+              range: `${firstSheetName}!${columnLetter}${currentRow}`,
               values: [[value]]
             });
           }
-          
-          columnLastRows[key]++; // 次の行に進む
         }
       }
+      currentRow++; // 次のデータ行に進む
     }
     
     console.log(`📡 書き込みリクエスト数: ${updateRequests.length}`);
@@ -628,7 +701,7 @@ app.post('/api/spreadsheets/:spreadsheetId/write-advanced', async (req, res) => 
         updatedCells: result.data.totalUpdatedCells,
         updatedRows: result.data.totalUpdatedRows,
         processedRecords: data.length,
-        actualStartRow: actualStartRow // 実際の書き込み開始行を追加
+        startRow: startRow // 構成部品基準の書き込み開始行
       });
     } else {
       res.json({

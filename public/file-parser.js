@@ -1,9 +1,9 @@
 // ファイル名解析クラス - 新仕様対応
 class FileNameParser {
     constructor() {
-        // 仕様: 番号_部品名_重量_単位_素材ID_加工ID_写真区分_特記事項.拡張子
-        // 例: 001_ねじ_10.1_g_st01_pr01_P_0.jpg
-        // 番号は無視して処理、残りの7項目を使用
+        // 仕様: 番号_部品名_重量_単位_素材ID_加工ID_実施者ID_写真区分_特記事項.拡張子
+        // 例: 001_ねじ_10.1_g_st01_pr01_N01_P_0.jpg
+        // 番号は無視して処理、残りの8項目を使用
         // 特記事項は必須項目
         // 写真区分がMの場合は処理対象外、Pの場合のみ処理対象
     }
@@ -17,15 +17,15 @@ class FileNameParser {
             // アンダーバーで分割
             const parts = nameWithoutExt.split('_');
             
-            // 必須項目: 番号、部品名、重量、単位、素材ID、加工ID、写真区分、特記事項（8項目）
-            // 番号は無視するが、形式チェックのため8項目必要
-            if (parts.length < 8) {
+            // 必須項目: 番号、部品名、重量、単位、素材ID、加工ID、実施者ID、写真区分、特記事項（9項目）
+            // 番号は無視するが、形式チェックのため9項目必要
+            if (parts.length < 9) {
                 return {
                     isValid: false,
-                    error: `必要な項目が不足しています（8項目必要、現在${parts.length}項目）`,
+                    error: `必要な項目が不足しています（9項目必要、現在${parts.length}項目）`,
                     fileName: fileName,
                     parts: parts,
-                    requiredFormat: '番号_部品名_重量_単位_素材ID_加工ID_写真区分_特記事項.拡張子'
+                    requiredFormat: '番号_部品名_重量_単位_素材ID_加工ID_実施者ID_写真区分_特記事項.拡張子'
                 };
             }
 
@@ -36,8 +36,9 @@ class FileNameParser {
             const unit = parts[3];        // 単位
             const materialId = parts[4];  // 素材ID
             const processId = parts[5];   // 加工ID
-            const photoType = parts[6];   // 写真区分
-            const notes = parts[7];       // 特記事項
+            const implementerId = parts[6]; // 実施者ID
+            const photoType = parts[7];   // 写真区分
+            const notes = parts[8];       // 特記事項
 
             // 写真区分の妥当性チェック
             if (!photoType || (photoType.toLowerCase() !== 'p' && photoType.toLowerCase() !== 'm')) {
@@ -66,6 +67,7 @@ class FileNameParser {
                     unit: unit.toLowerCase(),
                     materialId: materialId,
                     processId: processId,
+                    implementerId: implementerId,
                     photoType: photoType.toLowerCase(),
                     notes: notes,
                     parts: parts,
@@ -133,6 +135,7 @@ class FileNameParser {
                 unit: unit.toLowerCase(),
                 materialId: materialId,
                 processId: processId,
+                implementerId: implementerId,
                 photoType: photoType.toLowerCase(),
                 notes: notes,
                 parts: parts,

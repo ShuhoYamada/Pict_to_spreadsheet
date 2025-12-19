@@ -538,7 +538,7 @@ class SecureAPIManager {
     }
 
     // 新仕様に基づくデータ処理と書き込み（写真区分による分岐処理とハイパーリンク設定対応）
-    async processAndWriteData(spreadsheetId, photoFiles, materialMapping, processMapping) {
+    async processAndWriteData(spreadsheetId, photoFiles, materialMapping, processMapping, implementerMapping) {
         try {
             // ファイル名解析
             const parser = new FileNameParser();
@@ -593,17 +593,30 @@ class SecureAPIManager {
                 materialCategory: materialColumnIndex,
                 materialName: headers.indexOf('項目名'),
                 processName: headers.indexOf('加工方法'),
+                implementerName: headers.indexOf('実施者名'),
+                implementationDate: headers.indexOf('実施日'),
                 notesText: headers.indexOf('特記事項'),
                 originalUnit: headers.indexOf('元の単位')
             };
             
             console.log('📊 列マッピング:', columnMapping);
             
+            // 現在の年月を取得（yyyy/mmフォーマット）
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0'); // 月は0始まりなので+1、2桁にゼロパディング
+            const implementationDate = `${year}/${month}`;
+            
+            console.log(`📅 実施日: ${implementationDate}`);
+            
             // P区分ファイルのデータを変換
             const processedData = pTypeFiles.map(parsed => {
                 const materialData = materialMapping ? 
                     (materialMapping[parsed.materialId] || { name: '該当なし', category: '該当なし' }) :
                     { name: '該当なし', category: '該当なし' };
+                
+                const implementerName = implementerMapping ? 
+                    (implementerMapping[parsed.implementerId] || '該当なし') : '該当なし';
                 
                 return {
                     fileName: parsed.fileName,
@@ -612,6 +625,8 @@ class SecureAPIManager {
                     weightInKilograms: parsed.weightInKilograms,
                     materialId: parsed.materialId,
                     processId: parsed.processId,
+                    implementerName: implementerName,
+                    implementationDate: implementationDate,
                     notesText: parsed.notesText,
                     originalUnit: parsed.unit,
                     materialName: materialData.name,
@@ -649,7 +664,7 @@ class SecureAPIManager {
             let hyperlinkErrors = [];
             
             // サーバーから返された実際の書き込み開始行を使用
-            const startRow = writeResult.actualStartRow || 2;
+            const startRow = writeResult.startRow || writeResult.actualStartRow || 2;
             
             console.log(`📊 サーバーから取得した実際の書き込み開始行: ${startRow}`);
             console.log(`📊 P区分ファイル数: ${pTypeFiles.length}`);

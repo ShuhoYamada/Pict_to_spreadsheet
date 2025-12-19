@@ -8,22 +8,29 @@ class SecurePhotoFileManagerApp {
 
     async init() {
         try {
-            console.log('セキュア写真ファイル管理システムを初期化中...');
+            console.log('📋 写真ファイル管理システムの初期化中...');
+            
+            // 認証マネージャーが初期化されていない場合のみ初期化
+            if (!authManager) {
+                console.log('🔐 認証マネージャーを初期化中...');
+                authManager = new SecureAuthManager();
+                console.log('✅ 認証マネージャーを初期化しました');
+            } else {
+                console.log('✅ 認証マネージャーは既に初期化済みです');
+            }
             
             // 設定を検証（バックエンド接続確認）
             const isConfigValid = await this.validateConfig();
             if (!isConfigValid) {
+                console.warn('⚠️ バックエンドサーバーに接続できませんが、認証機能は利用可能です');
                 return;
             }
-
-            // セキュア認証マネージャーを初期化
-            authManager = new SecureAuthManager();
             
             // イベントリスナーを設定
             this.setupEventListeners();
             
             this.isInitialized = true;
-            console.log('セキュアアプリケーションの初期化が完了しました');
+            console.log('✅ 写真ファイル管理システムの初期化が完了しました');
             
         } catch (error) {
             console.error('アプリケーション初期化エラー:', error);
@@ -44,44 +51,64 @@ class SecurePhotoFileManagerApp {
 
     setupEventListeners() {
         // フォルダ選択ボタン
-        document.getElementById('select-folder-button').addEventListener('click', () => {
-            apiManager.showFolderSelector();
-        });
-
-        // 対応表選択の初期化
-        mappingManager.initialize();
+        const selectFolderButton = document.getElementById('select-folder-button');
+        if (selectFolderButton) {
+            selectFolderButton.addEventListener('click', () => {
+                apiManager.showFolderSelector();
+            });
+        } else {
+            console.error('select-folder-button が見つかりません');
+        }
 
         // スプレッドシート選択ボタン
-        document.getElementById('select-spreadsheet-button').addEventListener('click', () => {
-            apiManager.showSpreadsheetSelector();
-        });
+        const selectSpreadsheetButton = document.getElementById('select-spreadsheet-button');
+        if (selectSpreadsheetButton) {
+            selectSpreadsheetButton.addEventListener('click', () => {
+                apiManager.showSpreadsheetSelector();
+            });
+        } else {
+            console.error('select-spreadsheet-button が見つかりません');
+        }
 
         // データ処理ボタン
-        document.getElementById('process-data-button').addEventListener('click', () => {
-            this.processAndWriteData();
-        });
+        const processDataButton = document.getElementById('process-data-button');
+        if (processDataButton) {
+            processDataButton.addEventListener('click', () => {
+                this.processAndWriteData();
+            });
+        } else {
+            console.error('process-data-button が見つかりません');
+        }
 
         // ESCキーでモーダルを閉じる
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
-                document.getElementById('folder-modal').style.display = 'none';
-                document.getElementById('spreadsheet-modal').style.display = 'none';
+                const folderModal = document.getElementById('folder-modal');
+                const spreadsheetModal = document.getElementById('spreadsheet-modal');
+                if (folderModal) folderModal.style.display = 'none';
+                if (spreadsheetModal) spreadsheetModal.style.display = 'none';
                 hideError();
             }
         });
 
         // モーダル背景クリックで閉じる
-        document.getElementById('folder-modal').addEventListener('click', (event) => {
-            if (event.target === event.currentTarget) {
-                closeFolderModal();
-            }
-        });
+        const folderModal = document.getElementById('folder-modal');
+        if (folderModal) {
+            folderModal.addEventListener('click', (event) => {
+                if (event.target === event.currentTarget) {
+                    closeFolderModal();
+                }
+            });
+        }
 
-        document.getElementById('spreadsheet-modal').addEventListener('click', (event) => {
-            if (event.target === event.currentTarget) {
-                closeSpreadsheetModal();
-            }
-        });
+        const spreadsheetModal = document.getElementById('spreadsheet-modal');
+        if (spreadsheetModal) {
+            spreadsheetModal.addEventListener('click', (event) => {
+                if (event.target === event.currentTarget) {
+                    closeSpreadsheetModal();
+                }
+            });
+        }
     }
 
     async processAndWriteData() {
@@ -119,7 +146,8 @@ class SecurePhotoFileManagerApp {
                 selectedSpreadsheet.id,
                 photoFiles,
                 mappingManager.materialMapping,
-                mappingManager.processMapping
+                mappingManager.processMapping,
+                mappingManager.implementerMapping
             );
 
             this.updateProcessingStatus('✅ 処理完了', 100);
@@ -306,19 +334,29 @@ function checkProcessButtonState() {
 
 // ページ読み込み完了後にセキュアアプリケーションを初期化
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM読み込み完了 - セキュアアプリケーションを初期化します');
+    console.log('🚀 DOM読み込み完了 - セキュアアプリケーションを初期化します');
+    
+    // 認証マネージャーを最優先で初期化
+    if (!authManager) {
+        console.log('🔐 認証マネージャーを初期化中...');
+        authManager = new SecureAuthManager();
+        console.log('✅ 認証マネージャーの初期化が完了しました');
+    }
+    
     // マッピングのイベントはアプリ初期化に依存せず登録しておく
     // （バックエンド接続検証に失敗した場合でも、ファイル選択UIは動作させたい）
     try {
         if (typeof mappingManager !== 'undefined' && mappingManager && typeof mappingManager.initialize === 'function') {
             mappingManager.initialize();
-            console.log('mappingManager 初期化: イベントリスナー登録済み');
+            console.log('✅ mappingManager 初期化: イベントリスナー登録済み');
         }
     } catch (err) {
-        console.warn('mappingManager.initialize() 呼び出し中にエラー:', err);
+        console.warn('⚠️ mappingManager.initialize() 呼び出し中にエラー:', err);
     }
 
+    // メインアプリケーションを初期化
     window.photoFileManager = new SecurePhotoFileManagerApp();
+    console.log('✅ セキュアアプリケーションの初期化が完了しました');
 });
 
 // エラーハンドリング

@@ -3,8 +3,8 @@ class MappingTableManager {
     constructor() {
         this.materialMapping = null;
         this.processMapping = null;
-        this.materialMappingFile = null;
-        this.processMappingFile = null;
+        this.implementerMapping = null;
+        this.idMasterFile = null;
         this.eventListenersSetup = false; // 重複防止フラグ
     }
 
@@ -22,34 +22,19 @@ class MappingTableManager {
 
         console.log('🔧 マッピングマネージャーのイベントリスナーを設定中...');
 
-        // 素材ID対応表選択ボタン
-        const materialButton = document.getElementById('select-material-mapping-button');
-        if (materialButton) {
-            materialButton.addEventListener('click', () => {
-                document.getElementById('material-mapping-file').click();
-            });
-        }
-
-        // 加工ID対応表選択ボタン
-        const processButton = document.getElementById('select-process-mapping-button');
-        if (processButton) {
-            processButton.addEventListener('click', () => {
-                document.getElementById('process-mapping-file').click();
+        // IDマスター選択ボタン
+        const idMasterButton = document.getElementById('select-id-master-button');
+        if (idMasterButton) {
+            idMasterButton.addEventListener('click', () => {
+                document.getElementById('id-master-file').click();
             });
         }
 
         // ファイル選択イベント
-        const materialFileInput = document.getElementById('material-mapping-file');
-        if (materialFileInput) {
-            materialFileInput.addEventListener('change', (event) => {
-                this.handleMaterialMappingFile(event.target.files[0]);
-            });
-        }
-
-        const processFileInput = document.getElementById('process-mapping-file');
-        if (processFileInput) {
-            processFileInput.addEventListener('change', (event) => {
-                this.handleProcessMappingFile(event.target.files[0]);
+        const idMasterFileInput = document.getElementById('id-master-file');
+        if (idMasterFileInput) {
+            idMasterFileInput.addEventListener('change', (event) => {
+                this.handleIdMasterFile(event.target.files[0]);
             });
         }
 
@@ -57,28 +42,73 @@ class MappingTableManager {
         console.log('✅ マッピングマネージャーのイベントリスナー設定完了');
     }
 
-    // 素材ID対応表ファイルの処理
-    async handleMaterialMappingFile(file) {
+    // IDマスターファイルの処理
+    async handleIdMasterFile(file) {
         if (!file) return;
 
         try {
-            showProgress('素材ID対応表を読み込み中...', 0);
+            showProgress('IDマスターを読み込み中...', 0);
             
-            this.materialMappingFile = file;
-            // 素材名と素材区分の両方を取得
-            const mappingData = await this.parseMaterialExcelFile(file);
-            this.materialMapping = mappingData;
+            this.idMasterFile = file;
+            
+            // Excelファイルを読み込んで2つのシートから情報を取得
+            const arrayBuffer = await file.arrayBuffer();
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.load(arrayBuffer);
+
+            // 素材IDマスターシートを取得
+            const materialSheet = workbook.getWorksheet('素材IDマスター');
+            if (!materialSheet) {
+                throw new Error('「素材IDマスター」という名前のシートが見つかりません');
+            }
+
+            // 加工IDマスターシートを取得
+            const processSheet = workbook.getWorksheet('加工IDマスター');
+            if (!processSheet) {
+                throw new Error('「加工IDマスター」という名前のシートが見つかりません');
+            }
+
+            // 実施者IDマスターシートを取得
+            const implementerSheet = workbook.getWorksheet('実施者IDマスター');
+            if (!implementerSheet) {
+                throw new Error('「実施者IDマスター」という名前のシートが見つかりません');
+            }
+
+            // 素材データを解析
+            this.materialMapping = await this.parseMaterialSheet(materialSheet);
+            console.log('✅ 素材IDマスター読み込み完了:', Object.keys(this.materialMapping).length, '件');
+
+            // 加工データを解析
+            this.processMapping = await this.parseProcessSheet(processSheet);
+            console.log('✅ 加工IDマスター読み込み完了:', Object.keys(this.processMapping).length, '件');
+
+            // 実施者データを解析
+            this.implementerMapping = await this.parseImplementerSheet(implementerSheet);
+            console.log('✅ 実施者IDマスター読み込み完了:', Object.keys(this.implementerMapping).length, '件');
 
             // UI更新
-            const infoBox = document.getElementById('material-mapping-info');
+            const infoBox = document.getElementById('id-master-info');
             infoBox.innerHTML = `
                 <div class="mapping-file-success">
-                    <h4>✅ 素材ID対応表が読み込まれました</h4>
+                    <h4>✅ IDマスターが読み込まれました</h4>
                     <p><strong>ファイル名:</strong> ${file.name}</p>
-                    <p><strong>データ数:</strong> ${Object.keys(mappingData).length} 件</p>
-                    <div class="mapping-preview">
-                        <strong>プレビュー:</strong>
-                        ${this.generateMaterialMappingPreview(mappingData, 3)}
+                    <div class="mapping-section">
+                        <p><strong>📦 素材IDマスター:</strong> ${Object.keys(this.materialMapping).length} 件</p>
+                        <div class="mapping-preview">
+                            ${this.generateMaterialMappingPreview(this.materialMapping, 3)}
+                        </div>
+                    </div>
+                    <div class="mapping-section">
+                        <p><strong>⚙️ 加工IDマスター:</strong> ${Object.keys(this.processMapping).length} 件</p>
+                        <div class="mapping-preview">
+                            ${this.generateMappingPreview(this.processMapping, 3)}
+                        </div>
+                    </div>
+                    <div class="mapping-section">
+                        <p><strong>👤 実施者IDマスター:</strong> ${Object.keys(this.implementerMapping).length} 件</p>
+                        <div class="mapping-preview">
+                            ${this.generateMappingPreview(this.implementerMapping, 3)}
+                        </div>
                     </div>
                 </div>
             `;
@@ -89,44 +119,8 @@ class MappingTableManager {
 
         } catch (error) {
             hideProgress();
-            showError('素材ID対応表の読み込みに失敗しました: ' + error.message);
-            console.error('素材ID対応表エラー:', error);
-        }
-    }
-
-    // 加工ID対応表ファイルの処理
-    async handleProcessMappingFile(file) {
-        if (!file) return;
-
-        try {
-            showProgress('加工ID対応表を読み込み中...', 0);
-            
-            this.processMappingFile = file;
-            const mappingData = await this.parseExcelFile(file, '加工ID', '加工方法名');
-            this.processMapping = mappingData;
-
-            // UI更新
-            const infoBox = document.getElementById('process-mapping-info');
-            infoBox.innerHTML = `
-                <div class="mapping-file-success">
-                    <h4>✅ 加工ID対応表が読み込まれました</h4>
-                    <p><strong>ファイル名:</strong> ${file.name}</p>
-                    <p><strong>データ数:</strong> ${Object.keys(mappingData).length} 件</p>
-                    <div class="mapping-preview">
-                        <strong>プレビュー:</strong>
-                        ${this.generateMappingPreview(mappingData, 3)}
-                    </div>
-                </div>
-            `;
-            infoBox.classList.add('active');
-
-            hideProgress();
-            this.checkAllMappingsLoaded();
-
-        } catch (error) {
-            hideProgress();
-            showError('加工ID対応表の読み込みに失敗しました: ' + error.message);
-            console.error('加工ID対応表エラー:', error);
+            showError('IDマスターの読み込みに失敗しました: ' + error.message);
+            console.error('IDマスターエラー:', error);
         }
     }
 
@@ -150,136 +144,9 @@ class MappingTableManager {
         return value;
     }
 
-    // Excelファイルの解析（ExcelJS使用）
-    async parseExcelFile(file, idColumnName, nameColumnName) {
+    // 素材IDマスターシートを解析
+    async parseMaterialSheet(worksheet) {
         try {
-            const arrayBuffer = await file.arrayBuffer();
-            
-            // ExcelJSライブラリを使用してExcelファイルを解析
-            const workbook = new ExcelJS.Workbook();
-            await workbook.xlsx.load(arrayBuffer);
-            
-            // 最初のシートを取得
-            const worksheet = workbook.worksheets[0];
-            
-            // データ範囲を取得してJSONに変換
-            const jsonData = [];
-            const rowCount = worksheet.rowCount;
-            const colCount = worksheet.columnCount;
-            
-            console.log(`📊 ワークシート情報: ${rowCount}行 x ${colCount}列`);
-            
-            for (let rowIndex = 1; rowIndex <= rowCount; rowIndex++) {
-                const row = worksheet.getRow(rowIndex);
-                const rowData = [];
-                
-                for (let colIndex = 1; colIndex <= colCount; colIndex++) {
-                    const cell = row.getCell(colIndex);
-                    const cellValue = this.normalizeExcelValue(cell.value);
-                    rowData[colIndex - 1] = cellValue;
-                }
-                
-                jsonData.push(rowData);
-            }
-            
-            console.log('📊 解析されたデータ行数:', jsonData.length);
-            
-            if (jsonData.length < 2) {
-                throw new Error('ファイルにデータが不足しています（ヘッダー + 最低1行のデータが必要）');
-            }
-
-            // デバッグ: ヘッダー行の内容を確認
-            console.log('🔍 デバッグ - ヘッダー行:', jsonData[0]);
-            console.log('🔍 デバッグ - 探しているID列名:', idColumnName);
-            console.log('🔍 デバッグ - 探している名前列名:', nameColumnName);
-            
-            // 各ヘッダー値を詳細に確認
-            const headerRow = jsonData[0];
-            headerRow.forEach((header, index) => {
-                console.log(`🔍 列${index}:`, typeof header, '|', header, '|', 
-                           header ? header.toString().trim() : '(empty)');
-            });
-            
-            // より柔軟なヘッダー検索（大文字小文字、スペース、全角半角を無視）
-            const normalizeHeaderName = (name) => {
-                if (!name) return '';
-                return name.toString().trim()
-                    .replace(/\s+/g, '')  // 全てのスペースを削除
-                    .toLowerCase()        // 小文字に変換
-                    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)); // 全角→半角
-            };
-            
-            const targetIdName = normalizeHeaderName(idColumnName);
-            const targetNameName = normalizeHeaderName(nameColumnName);
-            
-            console.log('🔍 正規化された検索対象:', {
-                id: targetIdName,
-                name: targetNameName
-            });
-            
-            // ヘッダー行から列インデックスを特定
-            const idColumnIndex = headerRow.findIndex(header => 
-                normalizeHeaderName(header) === targetIdName
-            );
-            const nameColumnIndex = headerRow.findIndex(header => {
-                const normalizedHeader = normalizeHeaderName(header);
-                const normalizedTarget = normalizeHeaderName(nameColumnName);
-                
-                // 完全一致
-                if (normalizedHeader === normalizedTarget) return true;
-                
-                // 加工方法関連の特別処理
-                if (normalizedTarget.includes('加工') && normalizedTarget.includes('方法')) {
-                    return normalizedHeader === '加工方法' || 
-                           normalizedHeader === '加工方法名' ||
-                           normalizedHeader.includes('加工方法');
-                }
-                
-                return false;
-            });
-
-            if (idColumnIndex === -1) {
-                throw new Error(`「${idColumnName}」列が見つかりません`);
-            }
-            if (nameColumnIndex === -1) {
-                throw new Error(`「${nameColumnName}」列が見つかりません`);
-            }
-
-            // データ行を処理してマッピングオブジェクトを作成
-            const mapping = {};
-            for (let i = 1; i < jsonData.length; i++) {
-                const row = jsonData[i];
-                const id = row[idColumnIndex];
-                const name = row[nameColumnIndex];
-                
-                if (id && name) {
-                    mapping[id.toString().trim()] = name.toString().trim();
-                }
-            }
-
-            if (Object.keys(mapping).length === 0) {
-                throw new Error('有効なデータが見つかりませんでした');
-            }
-
-            return mapping;
-
-        } catch (error) {
-            throw new Error('ファイルの解析に失敗しました: ' + error.message);
-        }
-    }
-
-    // 素材Excelファイルの解析（素材名と素材区分の両方を取得）
-    async parseMaterialExcelFile(file) {
-        try {
-            const arrayBuffer = await file.arrayBuffer();
-            
-            // ExcelJSライブラリを使用してExcelファイルを解析
-            const workbook = new ExcelJS.Workbook();
-            await workbook.xlsx.load(arrayBuffer);
-            
-            // 最初のシートを取得
-            const worksheet = workbook.worksheets[0];
-            
             // データ範囲を取得してJSONに変換
             const jsonData = [];
             const rowCount = worksheet.rowCount;
@@ -301,7 +168,7 @@ class MappingTableManager {
             }
             
             if (jsonData.length < 2) {
-                throw new Error('ファイルにデータが不足しています（ヘッダー + 最低1行のデータが必要）');
+                throw new Error('素材IDマスターにデータが不足しています（ヘッダー + 最低1行のデータが必要）');
             }
 
             // ヘッダー行から列インデックスを特定
@@ -317,13 +184,13 @@ class MappingTableManager {
             );
 
             if (idColumnIndex === -1) {
-                throw new Error('「素材ID」列が見つかりません');
+                throw new Error('素材IDマスターに「素材ID」列が見つかりません');
             }
             if (nameColumnIndex === -1) {
-                throw new Error('「素材名」列が見つかりません');
+                throw new Error('素材IDマスターに「素材名」列が見つかりません');
             }
             if (categoryColumnIndex === -1) {
-                throw new Error('「素材区分」列が見つかりません');
+                throw new Error('素材IDマスターに「素材区分」列が見つかりません');
             }
 
             // データ行を処理してマッピングオブジェクトを作成
@@ -343,13 +210,185 @@ class MappingTableManager {
             }
 
             if (Object.keys(mapping).length === 0) {
-                throw new Error('有効なデータが見つかりませんでした');
+                throw new Error('素材IDマスターに有効なデータが見つかりませんでした');
             }
 
             return mapping;
 
         } catch (error) {
-            throw new Error('ファイルの解析に失敗しました: ' + error.message);
+            throw new Error('素材IDマスターの解析に失敗しました: ' + error.message);
+        }
+    }
+
+    // 加工IDマスターシートを解析
+    async parseProcessSheet(worksheet) {
+        try {
+            // データ範囲を取得してJSONに変換
+            const jsonData = [];
+            const rowCount = worksheet.rowCount;
+            const colCount = worksheet.columnCount;
+            
+            console.log(`📊 加工ワークシート情報: ${rowCount}行 x ${colCount}列`);
+            
+            for (let rowIndex = 1; rowIndex <= rowCount; rowIndex++) {
+                const row = worksheet.getRow(rowIndex);
+                const rowData = [];
+                
+                for (let colIndex = 1; colIndex <= colCount; colIndex++) {
+                    const cell = row.getCell(colIndex);
+                    const cellValue = this.normalizeExcelValue(cell.value);
+                    rowData[colIndex - 1] = cellValue;
+                }
+                
+                jsonData.push(rowData);
+            }
+            
+            if (jsonData.length < 2) {
+                throw new Error('加工IDマスターにデータが不足しています（ヘッダー + 最低1行のデータが必要）');
+            }
+
+            // ヘッダー行から列インデックスを特定
+            const headerRow = jsonData[0];
+            console.log('🔍 加工IDマスターヘッダー行:', headerRow);
+            
+            const normalizeHeaderName = (name) => {
+                if (!name) return '';
+                return name.toString().trim()
+                    .replace(/\s+/g, '')
+                    .toLowerCase()
+                    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+            };
+            
+            const idColumnIndex = headerRow.findIndex(header => 
+                normalizeHeaderName(header) === normalizeHeaderName('加工ID')
+            );
+            const nameColumnIndex = headerRow.findIndex(header => {
+                const normalizedHeader = normalizeHeaderName(header);
+                return normalizedHeader === normalizeHeaderName('加工方法名') ||
+                       normalizedHeader === normalizeHeaderName('加工方法') ||
+                       normalizedHeader.includes('加工方法');
+            });
+
+            if (idColumnIndex === -1) {
+                throw new Error('加工IDマスターに「加工ID」列が見つかりません');
+            }
+            if (nameColumnIndex === -1) {
+                throw new Error('加工IDマスターに「加工方法名」列が見つかりません');
+            }
+
+            // データ行を処理してマッピングオブジェクトを作成
+            const mapping = {};
+            for (let i = 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                const id = row[idColumnIndex];
+                const name = row[nameColumnIndex];
+                
+                if (id && name) {
+                    mapping[id.toString().trim()] = name.toString().trim();
+                }
+            }
+
+            if (Object.keys(mapping).length === 0) {
+                throw new Error('加工IDマスターに有効なデータが見つかりませんでした');
+            }
+
+            return mapping;
+
+        } catch (error) {
+            throw new Error('加工IDマスターの解析に失敗しました: ' + error.message);
+        }
+    }
+
+    // 実施者IDマスターシートを解析
+    async parseImplementerSheet(worksheet) {
+        try {
+            // データ範囲を取得してJSONに変換
+            const jsonData = [];
+            const rowCount = worksheet.rowCount;
+            const colCount = worksheet.columnCount;
+            
+            console.log(`📊 実施者ワークシート情報: ${rowCount}行 x ${colCount}列`);
+            
+            for (let rowIndex = 1; rowIndex <= rowCount; rowIndex++) {
+                const row = worksheet.getRow(rowIndex);
+                const rowData = [];
+                
+                for (let colIndex = 1; colIndex <= colCount; colIndex++) {
+                    const cell = row.getCell(colIndex);
+                    const cellValue = this.normalizeExcelValue(cell.value);
+                    rowData[colIndex - 1] = cellValue;
+                }
+                
+                jsonData.push(rowData);
+            }
+            
+            if (jsonData.length < 2) {
+                throw new Error('実施者IDマスターにデータが不足しています（ヘッダー + 最低1行のデータが必要）');
+            }
+
+            // ヘッダー行から列インデックスを特定
+            const headerRow = jsonData[0];
+            console.log('🔍 実施者IDマスターヘッダー行:', headerRow);
+            
+            const normalizeHeaderName = (name) => {
+                if (!name) return '';
+                return name.toString().trim()
+                    .replace(/\s+/g, '')
+                    .toLowerCase()
+                    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+            };
+            
+            const idColumnIndex = headerRow.findIndex(header => 
+                normalizeHeaderName(header) === normalizeHeaderName('実施者ID')
+            );
+            const nameColumnIndex = headerRow.findIndex(header => 
+                normalizeHeaderName(header) === normalizeHeaderName('実施者名')
+            );
+
+            if (idColumnIndex === -1) {
+                throw new Error('実施者IDマスターに「実施者ID」列が見つかりません');
+            }
+            if (nameColumnIndex === -1) {
+                throw new Error('実施者IDマスターに「実施者名」列が見つかりません');
+            }
+
+            // データ行を処理してマッピングオブジェクトを作成
+            const mapping = {};
+            for (let i = 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                const id = row[idColumnIndex];
+                const name = row[nameColumnIndex];
+                
+                if (id && name) {
+                    mapping[id.toString().trim()] = name.toString().trim();
+                }
+            }
+
+            if (Object.keys(mapping).length === 0) {
+                throw new Error('実施者IDマスターに有効なデータが見つかりませんでした');
+            }
+
+            return mapping;
+
+        } catch (error) {
+            throw new Error('実施者IDマスターの解析に失敗しました: ' + error.message);
+        }
+    }
+
+    // すべての対応表が読み込まれたかチェック
+    checkAllMappingsLoaded() {
+        if (this.materialMapping && this.processMapping && this.implementerMapping) {
+            // 処理実行ボタンを有効化するためのチェック関数を呼び出し
+            if (typeof checkProcessButtonState === 'function') {
+                checkProcessButtonState();
+            }
+            
+            // すべての対応表の読み込み完了メッセージを表示
+            if (typeof showMessage === 'function') {
+                showMessage('✅ IDマスターの読み込みが完了しました', 'success');
+            } else {
+                console.log('✅ IDマスターの読み込みが完了しました');
+            }
         }
     }
 
@@ -369,23 +408,6 @@ class MappingTableManager {
         const remaining = Object.keys(mapping).length - maxItems;
         
         return preview + (remaining > 0 ? `<br>...他 ${remaining} 件` : '');
-    }
-
-    // すべての対応表が読み込まれたかチェック
-    checkAllMappingsLoaded() {
-        if (this.materialMapping && this.processMapping) {
-            // 処理実行ボタンを有効化するためのチェック関数を呼び出し
-            if (typeof checkProcessButtonState === 'function') {
-                checkProcessButtonState();
-            }
-            
-            // すべての対応表の読み込み完了メッセージを表示
-            if (typeof showMessage === 'function') {
-                showMessage('✅ すべての対応表の読み込みが完了しました', 'success');
-            } else {
-                console.log('✅ すべての対応表の読み込みが完了しました');
-            }
-        }
     }
 
     // IDから素材データ（名前と区分）への変換
@@ -414,28 +436,32 @@ class MappingTableManager {
         return this.processMapping[processId] || '該当なし';
     }
 
+    // IDから実施者名への変換
+    getImplementerName(implementerId) {
+        if (!this.implementerMapping) {
+            return '該当なし';
+        }
+        return this.implementerMapping[implementerId] || '該当なし';
+    }
+
     // 対応表が準備完了かチェック
     isReady() {
-        return !!(this.materialMapping && this.processMapping);
+        return !!(this.materialMapping && this.processMapping && this.implementerMapping);
     }
 
     // リセット
     reset() {
         this.materialMapping = null;
         this.processMapping = null;
-        this.materialMappingFile = null;
-        this.processMappingFile = null;
+        this.implementerMapping = null;
+        this.idMasterFile = null;
 
         // UI リセット
-        const materialInfo = document.getElementById('material-mapping-info');
-        const processInfo = document.getElementById('process-mapping-info');
-        const materialFile = document.getElementById('material-mapping-file');
-        const processFile = document.getElementById('process-mapping-file');
+        const idMasterInfo = document.getElementById('id-master-info');
+        const idMasterFile = document.getElementById('id-master-file');
         
-        if (materialInfo) materialInfo.classList.remove('active');
-        if (processInfo) processInfo.classList.remove('active');
-        if (materialFile) materialFile.value = '';
-        if (processFile) processFile.value = '';
+        if (idMasterInfo) idMasterInfo.classList.remove('active');
+        if (idMasterFile) idMasterFile.value = '';
     }
 }
 

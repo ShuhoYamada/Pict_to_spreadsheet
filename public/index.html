@@ -36,22 +36,20 @@
 
             <!-- ステップ2: 対応表選択 -->
             <div class="step-section card">
-                <h2>📋 ステップ2: ID対応表を選択</h2>
+                <h2>📋 ステップ2: IDマスターを選択</h2>
                 <div class="mapping-files-section">
                     <div class="mapping-file-group">
-                        <h3>🧱 素材ID対応表</h3>
-                        <p class="mapping-description">素材IDを素材名に変換するためのExcelファイルを選択してください</p>
-                        <input type="file" id="material-mapping-file" accept=".xlsx,.xls,.csv" style="display: none;" />
-                        <button id="select-material-mapping-button" class="btn btn-secondary">素材ID対応表を選択</button>
-                        <div id="material-mapping-info" class="info-box"></div>
-                    </div>
-                    
-                    <div class="mapping-file-group">
-                        <h3>⚙️ 加工ID対応表</h3>
-                        <p class="mapping-description">加工IDを加工方法名に変換するためのExcelファイルを選択してください</p>
-                        <input type="file" id="process-mapping-file" accept=".xlsx,.xls,.csv" style="display: none;" />
-                        <button id="select-process-mapping-button" class="btn btn-secondary">加工ID対応表を選択</button>
-                        <div id="process-mapping-info" class="info-box"></div>
+                        <h3>📊 IDマスター</h3>
+                        <p class="mapping-description">
+                            素材ID・加工ID・実施者IDの統合マスターファイル（Excel）を選択してください<br>
+                            ※ 以下の3つのシートが必要です：<br>
+                            &nbsp;&nbsp;• 「素材IDマスター」（素材ID、素材名、素材区分）<br>
+                            &nbsp;&nbsp;• 「加工IDマスター」（加工ID、加工方法名）<br>
+                            &nbsp;&nbsp;• 「実施者IDマスター」（実施者ID、実施者名）
+                        </p>
+                        <input type="file" id="id-master-file" accept=".xlsx,.xls" style="display: none;" />
+                        <button id="select-id-master-button" class="btn btn-secondary">IDマスターを選択</button>
+                        <div id="id-master-info" class="info-box"></div>
                     </div>
                 </div>
             </div>
