@@ -45,6 +45,9 @@ tmp/
 temp/
 .cache/
 
+# テストファイル
+public/test-button.html
+
 # テストカバレッジ
 coverage/
 .nyc_output/

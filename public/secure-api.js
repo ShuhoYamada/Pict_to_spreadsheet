@@ -95,6 +95,11 @@ class SecureAPIManager {
         }
     }
 
+    // エイリアス: listSpreadsheets (互換性のため)
+    async listSpreadsheets() {
+        return await this.getSpreadsheets();
+    }
+
     // バックエンド経由でスプレッドシートにデータを書き込み
     async writeDataToSpreadsheet(spreadsheetId, parsedDataArray, sheetName = 'シート1') {
         try {
@@ -452,7 +457,7 @@ class SecureAPIManager {
 
     // ハイパーリンクをスプレッドシートのセルに設定（エクスポネンシャル・バックオフ付き）
     async setHyperlinkToCell(spreadsheetId, sheetName, cellAddress, url, displayText) {
-        const maxRetries = 5;
+        const maxRetries = 10;
         let retryCount = 0;
         
         while (retryCount < maxRetries) {
@@ -497,8 +502,8 @@ class SecureAPIManager {
                     throw new Error('ハイパーリンクの設定に失敗しました: ' + error.message);
                 }
                 
-                // エクスポネンシャル・バックオフ：1秒, 2秒, 4秒, 8秒, 16秒
-                const waitTime = Math.pow(2, retryCount - 1) * 1000;
+                // エクスポネンシャル・バックオフ：1秒, 2秒, 4秒, 8秒, 16秒, 32秒, 7回目以降は32秒固定
+                const waitTime = retryCount <= 6 ? Math.pow(2, retryCount - 1) * 1000 : 32000;
                 console.warn(`⚠️ ハイパーリンク設定失敗 (${retryCount}/${maxRetries}回目): ${cellAddress} - ${waitTime/1000}秒後にリトライ`);
                 
                 await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -801,16 +806,21 @@ class SecureAPIManager {
                     // 写真の共有リンクを取得
                     const shareLink = await this.getPhotoShareLink(mFile.fileInfo.id);
                     
-                    // セルの現在の値はサーバー側で取得するため、displayTextはnullにする
-                    console.log(`🔗 M区分ハイパーリンク設定: セルの現在値をサーバー側で取得`);
+                    // 対応するP区分ファイルの素材IDから素材名を取得（スプレッドシートに書き込まれた値と同じ）
+                    const materialData = materialMapping ? 
+                        (materialMapping[correspondingPFile.materialId] || { name: '該当なし', category: '該当なし' }) :
+                        { name: '該当なし', category: '該当なし' };
+                    const materialName = materialData.name;
                     
-                    // 素材列にハイパーリンクを設定（displayTextはnull = サーバー側で現在値を取得）
+                    console.log(`🔗 M区分ハイパーリンク設定: P区分(${correspondingPFile.materialId})の素材名="${materialName}" を表示テキストとして使用`);
+                    
+                    // 素材列にハイパーリンクを設定（素材名を明示的に指定）
                     await this.setHyperlinkToCell(
                         spreadsheetId, 
                         sheetName, 
                         materialCellAddress, 
                         shareLink.shareLink, 
-                        null  // サーバー側で現在のセル値を取得
+                        materialName  // P区分の素材名を表示テキストとして使用
                     );
                     
                     hyperlinkCount++;

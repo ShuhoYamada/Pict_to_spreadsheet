@@ -352,6 +352,65 @@ app.get('/api/folders/:folderId/photos', async (req, res) => {
   }
 });
 
+// フォルダ内のスプレッドシート取得
+app.get('/api/folders/:folderId/spreadsheets', async (req, res) => {
+  const { folderId } = req.params;
+  
+  try {
+    console.log(`📊 スプレッドシート・Excelファイル取得開始 (folderId: ${folderId})`);
+    
+    // スプレッドシートとExcelファイルの両方を取得
+    const spreadsheetQuery = `'${folderId}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`;
+    const excelQuery = `'${folderId}' in parents and (mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel') and trashed=false`;
+    
+    console.log(`🔍 スプレッドシートクエリ: ${spreadsheetQuery}`);
+    console.log(`🔍 Excelクエリ: ${excelQuery}`);
+    
+    // スプレッドシートを取得
+    const spreadsheetResponse = await drive.files.list({
+      q: spreadsheetQuery,
+      pageSize: 1000,
+      fields: 'files(id,name,modifiedTime,webViewLink,mimeType)',
+      orderBy: 'name',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    });
+    
+    // Excelファイルを取得
+    const excelResponse = await drive.files.list({
+      q: excelQuery,
+      pageSize: 1000,
+      fields: 'files(id,name,modifiedTime,webViewLink,mimeType)',
+      orderBy: 'name',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    });
+    
+    const spreadsheets = (spreadsheetResponse.data.files || []).map(file => ({
+      ...file,
+      fileType: 'spreadsheet'
+    }));
+    
+    const excelFiles = (excelResponse.data.files || []).map(file => ({
+      ...file,
+      fileType: 'excel'
+    }));
+    
+    // 両方を結合
+    const allFiles = [...spreadsheets, ...excelFiles].sort((a, b) => 
+      a.name.localeCompare(b.name)
+    );
+    
+    console.log(`✅ スプレッドシート ${spreadsheets.length} 個、Excelファイル ${excelFiles.length} 個取得`);
+    
+    res.json(allFiles);
+  } catch (error) {
+    console.error('スプレッドシート・Excelファイル取得エラー:', error);
+    console.error('エラー詳細:', error.message);
+    res.status(500).json({ error: 'スプレッドシート・Excelファイルの取得に失敗しました', details: error.message });
+  }
+});
+
 // 写真ファイルの共有リンク取得（個別）
 app.get('/api/files/:fileId/sharelink', async (req, res) => {
   const { fileId } = req.params;
@@ -535,6 +594,75 @@ app.post('/api/process-excel', upload.single('excelFile'), async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Excelファイルの処理に失敗しました',
+      details: error.message 
+    });
+  }
+});
+
+// Excelファイルをダウンロードして内容を取得
+app.get('/api/files/:fileId/excel-content', async (req, res) => {
+  const { fileId } = req.params;
+  
+  try {
+    console.log(`📥 Excelファイルダウンロード開始 (fileId: ${fileId})`);
+    
+    // ファイルをバイナリとしてダウンロード
+    const response = await drive.files.get({
+      fileId: fileId,
+      alt: 'media'
+    }, {
+      responseType: 'arraybuffer'
+    });
+    
+    console.log(`✅ Excelファイルダウンロード完了 (サイズ: ${response.data.byteLength} bytes)`);
+    
+    // ArrayBufferをBase64エンコードして返す
+    const buffer = Buffer.from(response.data);
+    const base64 = buffer.toString('base64');
+    
+    res.json({
+      success: true,
+      content: base64,
+      size: buffer.length
+    });
+  } catch (error) {
+    console.error('Excelファイルダウンロードエラー:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Excelファイルのダウンロードに失敗しました',
+      details: error.message 
+    });
+  }
+});
+
+// スプレッドシートの特定シートのデータを取得
+app.get('/api/spreadsheets/:spreadsheetId/sheets/:sheetName/data', async (req, res) => {
+  const { spreadsheetId, sheetName } = req.params;
+  
+  try {
+    console.log(`📡 シートデータ取得リクエスト: スプレッドシートID=${spreadsheetId}, シート名=${sheetName}`);
+    
+    // シートのデータを取得
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetName}`,
+      valueRenderOption: 'UNFORMATTED_VALUE'
+    });
+    
+    const values = response.data.values || [];
+    console.log(`📡 取得したデータ行数: ${values.length}`);
+    
+    res.json({
+      success: true,
+      values: values,
+      sheetName: sheetName,
+      rowCount: values.length
+    });
+  } catch (error) {
+    console.error('シートデータ取得エラー:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: `シート「${sheetName}」のデータ取得に失敗しました`,
       details: error.message 
     });
   }
@@ -952,7 +1080,7 @@ app.post('/api/spreadsheets/:spreadsheetId/set-hyperlink', async (req, res) => {
     // リトライメカニズム付きでハイパーリンク設定を実行
     let result;
     let retryCount = 0;
-    const maxRetries = 5;
+    const maxRetries = 10;
     
     while (retryCount < maxRetries) {
       try {
@@ -972,8 +1100,8 @@ app.post('/api/spreadsheets/:spreadsheetId/set-hyperlink', async (req, res) => {
           throw retryError;
         }
         
-        // エクスポネンシャル・バックオフ：1秒, 2秒, 4秒, 8秒, 16秒
-        const waitTime = Math.pow(2, retryCount - 1) * 1000;
+        // エクスポネンシャル・バックオフ：1秒, 2秒, 4秒, 8秒, 16秒, 32秒, 7回目以降は32秒固定
+        const waitTime = retryCount <= 6 ? Math.pow(2, retryCount - 1) * 1000 : 32000;
         console.log(`⏳ ${waitTime/1000}秒待機してリトライします... (エクスポネンシャル・バックオフ)`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }

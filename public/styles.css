@@ -409,13 +409,13 @@ header p {
     color: #4a5568;
 }
 
-/* フォルダ・スプレッドシートリスト */
-.folder-list, .spreadsheet-list {
+/* フォルダ・スプレッドシート・IDマスターリスト */
+.folder-list, .spreadsheet-list, .id-master-list {
     display: grid;
     gap: 10px;
 }
 
-.folder-item, .spreadsheet-item {
+.folder-item, .spreadsheet-item, .list-item {
     padding: 15px;
     border: 2px solid #e2e8f0;
     border-radius: 8px;
@@ -563,15 +563,40 @@ header p {
     cursor: pointer;
 }
 
-.folder-item:hover, .spreadsheet-item:hover {
+.list-item {
+    cursor: pointer;
+}
+
+.folder-item:hover, .spreadsheet-item:hover, .list-item:hover {
     border-color: #667eea;
     background: #f0f4ff;
     transform: translateY(-2px);
 }
 
-.folder-item.selected, .spreadsheet-item.selected {
+.folder-item.selected, .spreadsheet-item.selected, .list-item.selected {
     border-color: #667eea;
     background: #e6f3ff;
+}
+
+/* アイテム情報のスタイル */
+.item-icon {
+    font-size: 2rem;
+    flex-shrink: 0;
+}
+
+.item-info {
+    flex: 1;
+}
+
+.item-name {
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 4px;
+}
+
+.item-modified {
+    font-size: 0.85rem;
+    color: #718096;
 }
 
 /* ファイルプレビュー */
@@ -657,4 +682,24 @@ footer {
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+/* セクションヘッダー */
+.section-header {
+    margin-top: 15px;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    background: linear-gradient(45deg, #edf2f7, #e2e8f0);
+    border-left: 4px solid #667eea;
+    font-weight: bold;
+    color: #4a5568;
+    border-radius: 4px;
+}
+
+/* アイテムなし表示 */
+.no-items {
+    text-align: center;
+    padding: 30px;
+    color: #718096;
+    font-style: italic;
 }

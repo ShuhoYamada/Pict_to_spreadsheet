@@ -41,14 +41,13 @@
                     <div class="mapping-file-group">
                         <h3>📊 IDマスター</h3>
                         <p class="mapping-description">
-                            素材ID・加工ID・実施者IDの統合マスターファイル（Excel）を選択してください<br>
+                            素材ID・加工ID・実施者IDの統合マスターファイル（Googleスプレッドシート）を選択してください<br>
                             ※ 以下の3つのシートが必要です：<br>
                             &nbsp;&nbsp;• 「素材IDマスター」（素材ID、素材名、素材区分）<br>
                             &nbsp;&nbsp;• 「加工IDマスター」（加工ID、加工方法名）<br>
                             &nbsp;&nbsp;• 「実施者IDマスター」（実施者ID、実施者名）
                         </p>
-                        <input type="file" id="id-master-file" accept=".xlsx,.xls" style="display: none;" />
-                        <button id="select-id-master-button" class="btn btn-secondary">IDマスターを選択</button>
+                        <button id="select-id-master-button" class="btn btn-secondary">Googleドライブから選択</button>
                         <div id="id-master-info" class="info-box"></div>
                     </div>
                 </div>
@@ -107,6 +106,19 @@
                 </div>
                 <div class="modal-body">
                     <div id="spreadsheet-list" class="spreadsheet-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- IDマスター選択モーダル -->
+        <div id="id-master-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>📊 IDマスタースプレッドシートを選択してください</h3>
+                    <button class="close-button" onclick="closeIdMasterModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="id-master-list" class="id-master-list"></div>
                 </div>
             </div>
         </div>
